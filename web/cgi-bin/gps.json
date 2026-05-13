@@ -1,0 +1,9 @@
+#!/bin/sh
+
+LAT="$(gpsctl -i 2>/dev/null || true)"
+LON="$(gpsctl -x 2>/dev/null || true)"
+STATUS="$(gpsctl -s 2>/dev/null || true)"
+TIME="$(gpsctl -e 2>/dev/null || true)"
+
+printf 'Content-Type: application/json\r\n\r\n'
+printf '{"latitude":"%s","longitude":"%s","status":"%s","datetime":"%s"}\n' "$LAT" "$LON" "$STATUS" "$TIME"

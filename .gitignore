@@ -1,0 +1,12 @@
+# Runtime GPS track data
+web/data/
+tmp/
+gps_track*.log
+*.gps.log
+*.gpx
+*.kml
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

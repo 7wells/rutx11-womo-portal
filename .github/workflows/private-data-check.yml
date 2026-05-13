@@ -1,0 +1,16 @@
+name: Private data check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  private-data-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check for private GPS/runtime data
+        run: sh scripts/check_no_private_data.sh
