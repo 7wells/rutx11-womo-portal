@@ -1,7 +1,7 @@
 #!/bin/sh
 
 LIVE_TRACK="/tmp/womo/gps_track_live.log"
-PERSISTENT_TRACK="/usr/local/home/www/womo/data/gps_track.log"
+PERSISTENT_TRACK="/usr/local/home/root/womo-data/gps_track.log"
 
 MIN_DISTANCE=20
 
@@ -30,7 +30,7 @@ fi
 NOW="$(date +%s)"
 
 mkdir -p /tmp/womo
-mkdir -p /usr/local/home/www/womo/data
+mkdir -p /usr/local/home/root/womo-data
 
 touch "$LIVE_TRACK"
 touch "$PERSISTENT_TRACK"
@@ -66,6 +66,7 @@ fi
 
 if [ "$ADD_POINT" = "1" ]; then
   echo "${NOW},${LAT},${LON}" >> "$LIVE_TRACK"
+  echo "${NOW},${LAT},${LON}" >> "$PERSISTENT_TRACK"
 fi
 
 ONE_HOUR_AGO=$((NOW - 3600))

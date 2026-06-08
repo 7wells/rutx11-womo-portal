@@ -3,21 +3,21 @@
 set -eu
 
 LIVE_TRACK="/tmp/womo/gps_track_live.log"
-PERSISTENT_TRACK="/usr/local/home/www/womo/data/gps_track.log"
+PERSISTENT_TRACK="/usr/local/home/root/womo-data/gps_track.log"
 TMP_FILE="/tmp/womo/gps_track_sync.tmp"
 
 NOW="$(date +%s)"
-FOUR_WEEKS_AGO=$((NOW - 2419200))
+RETENTION_LIMIT=$((NOW - 15552000))
 
 mkdir -p /tmp/womo
-mkdir -p /usr/local/home/www/womo/data
+mkdir -p /usr/local/home/root/womo-data
 
 touch "$LIVE_TRACK"
 touch "$PERSISTENT_TRACK"
 
-# Merge volatile live points into persistent storage and keep only four weeks.
+# Merge volatile live points into persistent storage and keep 180 days.
 cat "$PERSISTENT_TRACK" "$LIVE_TRACK" 2>/dev/null \
-  | awk -F',' -v limit="$FOUR_WEEKS_AGO" '
+  | awk -F',' -v limit="$RETENTION_LIMIT" '
       NF == 3 && $1 >= limit
     ' \
   | sort -t',' -k1,1n -u \

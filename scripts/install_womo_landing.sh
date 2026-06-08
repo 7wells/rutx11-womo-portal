@@ -4,7 +4,7 @@ set -eu
 
 WEB_ROOT="/usr/local/home/www/womo"
 CGI_DIR="$WEB_ROOT/cgi-bin"
-DATA_DIR="$WEB_ROOT/data"
+PERSISTENT_DATA_DIR="/usr/local/home/root/womo-data"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
@@ -16,6 +16,7 @@ LEAFLET_BASE_URL="https://unpkg.com/leaflet@$LEAFLET_VERSION/dist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_SOURCE="$REPO_ROOT/web"
+LEAFLET_SOURCE="$WEB_SOURCE/assets/leaflet"
 SYNC_SOURCE="$REPO_ROOT/scripts/sync_womo_gps_track.sh"
 
 status() {
@@ -39,18 +40,28 @@ download_file() {
   status "Downloading $label ..."
 
   if command -v wget >/dev/null 2>&1; then
-    wget -qO "$target" "$url"
+    wget -qO "$target" "$url" || fail "Failed to download $label from $url."
     status "Downloading $label done."
     return
   fi
 
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$target"
+    curl -fsSL "$url" -o "$target" || fail "Failed to download $label from $url."
     status "Downloading $label done."
     return
   fi
 
   fail "Neither curl nor wget is available for downloading Leaflet."
+}
+
+leaflet_assets_present() {
+  base="$1"
+
+  [ -f "$base/leaflet.css" ] &&
+    [ -f "$base/leaflet.js" ] &&
+    [ -f "$base/images/marker-icon.png" ] &&
+    [ -f "$base/images/marker-icon-2x.png" ] &&
+    [ -f "$base/images/marker-shadow.png" ]
 }
 
 install_web_files() {
@@ -86,22 +97,29 @@ install_leaflet() {
 
   mkdir -p "$LEAFLET_DIR/images"
 
-  if [ -f "$LEAFLET_MARKER" ] &&
-     [ "$(cat "$LEAFLET_MARKER")" = "$LEAFLET_VERSION" ] &&
-     [ -f "$LEAFLET_DIR/leaflet.css" ] &&
-     [ -f "$LEAFLET_DIR/leaflet.js" ] &&
-     [ -f "$LEAFLET_DIR/images/marker-icon.png" ] &&
-     [ -f "$LEAFLET_DIR/images/marker-icon-2x.png" ] &&
-     [ -f "$LEAFLET_DIR/images/marker-shadow.png" ]; then
+  if leaflet_assets_present "$LEAFLET_DIR"; then
+    printf '%s\n' "$LEAFLET_VERSION" > "$LEAFLET_MARKER"
     return
   fi
 
-  download_file "$LEAFLET_BASE_URL/leaflet.css" "$LEAFLET_DIR/leaflet.css" "leaflet.css"
-  download_file "$LEAFLET_BASE_URL/leaflet.js" "$LEAFLET_DIR/leaflet.js" "leaflet.js"
+  if leaflet_assets_present "$LEAFLET_SOURCE"; then
+    cp "$LEAFLET_SOURCE/leaflet.css" "$LEAFLET_DIR/leaflet.css"
+    cp "$LEAFLET_SOURCE/leaflet.js" "$LEAFLET_DIR/leaflet.js"
+    cp "$LEAFLET_SOURCE/images/marker-icon.png" "$LEAFLET_DIR/images/marker-icon.png"
+    cp "$LEAFLET_SOURCE/images/marker-icon-2x.png" "$LEAFLET_DIR/images/marker-icon-2x.png"
+    cp "$LEAFLET_SOURCE/images/marker-shadow.png" "$LEAFLET_DIR/images/marker-shadow.png"
+  else
+    status "Local Leaflet assets are incomplete; using download fallback."
 
-  for image in marker-icon.png marker-icon-2x.png marker-shadow.png; do
-    download_file "$LEAFLET_BASE_URL/images/$image" "$LEAFLET_DIR/images/$image" "$image"
-  done
+    download_file "$LEAFLET_BASE_URL/leaflet.css" "$LEAFLET_DIR/leaflet.css" "leaflet.css"
+    download_file "$LEAFLET_BASE_URL/leaflet.js" "$LEAFLET_DIR/leaflet.js" "leaflet.js"
+
+    for image in marker-icon.png marker-icon-2x.png marker-shadow.png; do
+      download_file "$LEAFLET_BASE_URL/images/$image" "$LEAFLET_DIR/images/$image" "$image"
+    done
+  fi
+
+  leaflet_assets_present "$LEAFLET_DIR" || fail "Leaflet assets are incomplete after install."
 
   printf '%s\n' "$LEAFLET_VERSION" > "$LEAFLET_MARKER"
 }
@@ -157,7 +175,7 @@ need_file "$WEB_SOURCE/cgi-bin/gps_track.cgi"
 need_file "$SYNC_SOURCE"
 
 status "Creating target directories"
-mkdir -p "$WEB_ROOT" "$CGI_DIR" "$DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
+mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
 
 install_web_files
 install_leaflet
