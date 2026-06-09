@@ -139,7 +139,7 @@
       right: 10px;
     }
 
-    .reset-zoom {
+    .map-action {
       width: 30px;
       height: 30px;
       line-height: 30px;
@@ -150,6 +150,11 @@
       text-decoration: none;
       font: bold 15px Arial, sans-serif;
       border-top: 1px solid #ccc;
+    }
+
+    .map-action.disabled {
+      color: #9ca3af;
+      pointer-events: none;
     }
 
     @media (prefers-color-scheme: light) {
@@ -245,12 +250,18 @@
     const map = L.map('map', { zoomControl: false }).setView([51.0, 10.0], DEFAULT_ZOOM);
 
     const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.DomUtil.create('a', 'reset-zoom', zoomControl._container);
+    L.DomUtil.create('a', 'map-action locate-button', zoomControl._container);
+    L.DomUtil.create('a', 'map-action fit-button disabled', zoomControl._container);
 
-    const resetButton = zoomControl._container.querySelector('.reset-zoom');
-    resetButton.href = '#';
-    resetButton.title = 'Zoom zurücksetzen';
-    resetButton.textContent = '⦿';
+    const locateButton = zoomControl._container.querySelector('.locate-button');
+    locateButton.href = '#';
+    locateButton.title = 'Aktuellen Standort zentrieren';
+    locateButton.textContent = '⦿';
+
+    const fitButton = zoomControl._container.querySelector('.fit-button');
+    fitButton.href = '#';
+    fitButton.title = 'Track einpassen';
+    fitButton.textContent = '⛶';
 
     const marker = L.marker([51.0, 10.0]).addTo(map);
     let historyLine = null;
@@ -267,15 +278,21 @@
     const csvExport = document.getElementById('csvExport');
     const gpxExport = document.getElementById('gpxExport');
 
-    resetButton.addEventListener('click', function (event) {
+    locateButton.addEventListener('click', function (event) {
+      event.preventDefault();
+
+      if (lastLat !== null && lastLon !== null) {
+        map.setView([lastLat, lastLon], DEFAULT_ZOOM);
+      } else {
+        map.setZoom(DEFAULT_ZOOM);
+      }
+    });
+
+    fitButton.addEventListener('click', function (event) {
       event.preventDefault();
 
       if (activeHistoryLatLngs.length > 0) {
         fitHistory(activeHistoryLatLngs);
-      } else if (lastLat !== null && lastLon !== null) {
-        map.setView([lastLat, lastLon], DEFAULT_ZOOM);
-      } else {
-        map.setZoom(DEFAULT_ZOOM);
       }
     });
 
@@ -386,6 +403,10 @@
       });
     }
 
+    function updateFitButtonState() {
+      fitButton.classList.toggle('disabled', activeHistoryLatLngs.length < 1);
+    }
+
     function clearHistoryLayers() {
       if (historyLine) {
         map.removeLayer(historyLine);
@@ -398,6 +419,7 @@
 
       historyMarkers = [];
       activeHistoryLatLngs = [];
+      updateFitButtonState();
     }
 
     function normalizeHistory(history) {
@@ -441,6 +463,7 @@
         }
 
         activeHistoryLatLngs = latlngs;
+        updateFitButtonState();
 
         if (latlngs.length >= 2) {
           historyLine = L.polyline(latlngs, {

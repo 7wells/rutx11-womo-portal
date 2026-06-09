@@ -7,6 +7,8 @@ CGI_DIR="$WEB_ROOT/cgi-bin"
 PERSISTENT_DATA_DIR="/usr/local/home/womo-data"
 LEGACY_PERSISTENT_DATA_DIR="/usr/local/home/root/womo-data"
 GPS_DATA_DIR="$PERSISTENT_DATA_DIR/gps"
+CGI_USER="uhttpd"
+CGI_GROUP="uhttpd"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
@@ -167,6 +169,14 @@ set_permissions() {
   chmod 755 "$GPS_DATA_DIR"
   find "$GPS_DATA_DIR" -type f -name '*.csv' -exec chmod 644 {} \; 2>/dev/null || true
   [ ! -f "$PERSISTENT_DATA_DIR/gps_track.log" ] || chmod 644 "$PERSISTENT_DATA_DIR/gps_track.log"
+
+  if grep -q "^$CGI_USER:" /etc/passwd 2>/dev/null; then
+    if grep -q "^$CGI_GROUP:" /etc/group 2>/dev/null; then
+      chown -R "$CGI_USER:$CGI_GROUP" "$PERSISTENT_DATA_DIR"
+    else
+      chown -R "$CGI_USER" "$PERSISTENT_DATA_DIR"
+    fi
+  fi
 }
 
 install_cron() {
@@ -213,8 +223,8 @@ install_web_files
 migrate_legacy_data
 install_leaflet
 install_sync_script
-set_permissions
 "$SYNC_SCRIPT" >/dev/null 2>&1 || true
+set_permissions
 install_cron
 configure_uhttpd
 

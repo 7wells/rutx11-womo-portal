@@ -19,6 +19,8 @@ LIVE_TRACK="${WOMO_LIVE_TRACK:-/tmp/womo/gps_track_live.log}"
 TMP_DIR="${WOMO_TMP_DIR:-/tmp/womo}"
 TMP_SORTED="$TMP_DIR/gps_track_sync_sorted.tmp"
 TMP_LIVE="$TMP_DIR/gps_track_live.tmp"
+CGI_USER="${WOMO_CGI_USER:-uhttpd}"
+CGI_GROUP="${WOMO_CGI_GROUP:-uhttpd}"
 
 NOW="$(date +%s)"
 RETENTION_LIMIT=$((NOW - 31536000))
@@ -88,5 +90,17 @@ awk -F',' -v limit="$LIVE_LIMIT" '
 
 mv "$TMP_LIVE" "$LIVE_TRACK"
 rm -f "$TMP_SORTED"
+
+chmod 755 "$DATA_DIR" "$GPS_DIR"
+find "$GPS_DIR" -type f -name '*.csv' -exec chmod 644 {} \; 2>/dev/null || true
+[ ! -f "$LEGACY_TRACK" ] || chmod 644 "$LEGACY_TRACK"
+
+if grep -q "^$CGI_USER:" /etc/passwd 2>/dev/null; then
+  if grep -q "^$CGI_GROUP:" /etc/group 2>/dev/null; then
+    chown -R "$CGI_USER:$CGI_GROUP" "$DATA_DIR"
+  else
+    chown -R "$CGI_USER" "$DATA_DIR"
+  fi
+fi
 
 echo "OK: GPS track synced."

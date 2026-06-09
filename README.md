@@ -74,6 +74,10 @@ Installed paths:
 - persistent data:
   /usr/local/home/womo-data
 
+- persistent data owner:
+  uhttpd, so CGI scripts can append new GPS points while the cron sync can still
+  maintain retention as root.
+
 - legacy persistent data source:
   /usr/local/home/root/womo-data
 
