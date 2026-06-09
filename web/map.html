@@ -58,6 +58,54 @@
       color: #b8c1d1;
     }
 
+    .range-row {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .range-row input,
+    .export-link {
+      min-height: 30px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 0.76rem;
+    }
+
+    .range-row input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 4px 6px;
+      background: rgba(255,255,255,0.14);
+      color: inherit;
+    }
+
+    .export-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      background: rgba(255,255,255,0.16);
+      color: #f3f4f6;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .export-link.disabled {
+      opacity: 0.42;
+      pointer-events: none;
+    }
+
+    .range-error {
+      margin-top: 5px;
+      min-height: 1em;
+      color: #fca5a5;
+      font-size: 0.74rem;
+    }
+
     .info a {
       color: #93c5fd;
       text-decoration: none;
@@ -127,6 +175,26 @@
         background: #2563eb;
         color: white;
       }
+
+      .range-row input {
+        background: rgba(17,24,39,0.08);
+        color: #111827;
+      }
+
+      .export-link {
+        background: rgba(17,24,39,0.10);
+        color: #111827;
+      }
+
+      .range-error {
+        color: #b91c1c;
+      }
+    }
+
+    @media (max-width: 430px) {
+      .range-row {
+        grid-template-columns: 1fr 1fr;
+      }
     }
   </style>
 </head>
@@ -151,6 +219,14 @@
       <span>Sat fix: <span id="satfix">-</span></span>
       <a id="googlemaps" href="#" target="_blank" rel="noopener noreferrer">Google Maps</a>
     </div>
+
+    <div class="range-row">
+      <input id="fromDate" type="date" aria-label="Von">
+      <input id="toDate" type="date" aria-label="Bis">
+      <a id="csvExport" class="export-link disabled" href="#" download>CSV</a>
+      <a id="gpxExport" class="export-link disabled" href="#" download>GPX</a>
+    </div>
+    <div id="rangeError" class="range-error"></div>
   </div>
 
   <div id="map"></div>
@@ -160,8 +236,11 @@
   <script>
     const DEFAULT_ZOOM = 16;
     const MAX_ZOOM = 19;
+    const MAX_RANGE_DAYS = 365;
 
     let currentRange = '1h';
+    let customFrom = '';
+    let customTo = '';
 
     const map = L.map('map', { zoomControl: false }).setView([51.0, 10.0], DEFAULT_ZOOM);
 
@@ -179,6 +258,12 @@
     let firstFix = true;
     let lastLat = null;
     let lastLon = null;
+
+    const fromDateInput = document.getElementById('fromDate');
+    const toDateInput = document.getElementById('toDate');
+    const rangeError = document.getElementById('rangeError');
+    const csvExport = document.getElementById('csvExport');
+    const gpxExport = document.getElementById('gpxExport');
 
     resetButton.addEventListener('click', function (event) {
       event.preventDefault();
@@ -207,9 +292,88 @@
       return dateParts[2] + '.' + dateParts[1] + '.' + dateParts[0] + ', ' + parts[1];
     }
 
+    function dateToUtc(value) {
+      const parts = value.split('-');
+      if (parts.length !== 3) return null;
+
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      const day = Number(parts[2]);
+
+      if (!year || !month || !day) return null;
+
+      return Date.UTC(year, month - 1, day);
+    }
+
+    function setExportState(enabled) {
+      csvExport.classList.toggle('disabled', !enabled);
+      gpxExport.classList.toggle('disabled', !enabled);
+
+      if (!enabled) {
+        csvExport.href = '#';
+        gpxExport.href = '#';
+        return;
+      }
+
+      const query = '?from=' + encodeURIComponent(customFrom) + '&to=' + encodeURIComponent(customTo);
+      csvExport.href = '/cgi-bin/gps_export.cgi' + query + '&format=csv';
+      gpxExport.href = '/cgi-bin/gps_export.cgi' + query + '&format=gpx';
+    }
+
+    function validateCustomRange() {
+      const from = fromDateInput.value;
+      const to = toDateInput.value;
+
+      customFrom = '';
+      customTo = '';
+      rangeError.textContent = '';
+      setExportState(false);
+
+      if (!from && !to) return false;
+
+      if (!from || !to) {
+        rangeError.textContent = 'Von und Bis auswählen';
+        return false;
+      }
+
+      const fromTs = dateToUtc(from);
+      const toTs = dateToUtc(to);
+
+      if (fromTs === null || toTs === null) {
+        rangeError.textContent = 'Ungültiges Datum';
+        return false;
+      }
+
+      if (fromTs > toTs) {
+        rangeError.textContent = 'Von muss vor Bis liegen';
+        return false;
+      }
+
+      const days = Math.floor((toTs - fromTs) / 86400000) + 1;
+      if (days > MAX_RANGE_DAYS) {
+        rangeError.textContent = 'Maximal 365 Tage';
+        return false;
+      }
+
+      customFrom = from;
+      customTo = to;
+      setExportState(true);
+      return true;
+    }
+
+    function historyUrl() {
+      if (customFrom && customTo) {
+        return '/cgi-bin/gps_track.cgi?from=' + encodeURIComponent(customFrom) + '&to=' + encodeURIComponent(customTo) + '&_=' + Date.now();
+      }
+
+      return '/cgi-bin/gps_track.cgi?range=' + currentRange + '&_=' + Date.now();
+    }
+
     async function updateHistory() {
       try {
-        const response = await fetch('/cgi-bin/gps_track.cgi?range=' + currentRange + '&_=' + Date.now());
+        const response = await fetch(historyUrl());
+        if (!response.ok) throw new Error('GPS history HTTP ' + response.status);
+
         const history = await response.json();
 
         if (historyLine) {
@@ -294,7 +458,25 @@
 
         button.classList.add('active');
         currentRange = button.dataset.range;
+        fromDateInput.value = '';
+        toDateInput.value = '';
+        customFrom = '';
+        customTo = '';
+        rangeError.textContent = '';
+        setExportState(false);
         updateHistory();
+      });
+    });
+
+    [fromDateInput, toDateInput].forEach(function(input) {
+      input.addEventListener('change', function() {
+        document.querySelectorAll('.track-tab').forEach(function(item) {
+          item.classList.remove('active');
+        });
+
+        if (validateCustomRange()) {
+          updateHistory();
+        }
       });
     });
 

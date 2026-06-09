@@ -8,6 +8,7 @@ Features:
 - Mobile-friendly landing page
 - OpenStreetMap live GPS map
 - GPS tracking UI (Live / 24h / 4w)
+- Date range selection and CSV/GPX export
 - Local Leaflet asset caching
 - No cloud dependency
 - Lightweight CGI backend
@@ -39,7 +40,8 @@ Restore after a firmware update:
   enables the CGI scripts, prepares `/usr/local/home/root/womo-data`, and
   configures uhttpd on port 8080.
 - Existing GPS history in `/usr/local/home/root/womo-data/gps_track.log` is not
-  overwritten by the installer.
+  overwritten by the installer and is migrated into monthly files by the sync
+  script.
 
 Runtime data:
 - live GPS track:
@@ -48,8 +50,11 @@ Runtime data:
 - persistent GPS track:
   /usr/local/home/root/womo-data/gps_track.log
 
+- monthly GPS track files:
+  /usr/local/home/root/womo-data/gps/YYYY-MM.csv
+
 - persistent GPS retention:
-  180 days internally; the current UI still shows Live, 24h, and 4w.
+  365 days.
 
 Installed paths:
 - web root:
@@ -62,7 +67,9 @@ Test URLs:
 - http://10.10.10.2:8080/
 - http://10.10.10.2:8080/map.html
 - http://10.10.10.2:8080/cgi-bin/gps_track.cgi
+- http://10.10.10.2:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
+- http://10.10.10.2:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv
+- http://10.10.10.2:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=gpx
 
 Planned:
-- Date range selection from/to.
-- Export for the selected range, for example GPX or CSV.
+- Optional map display improvements for large exported ranges.

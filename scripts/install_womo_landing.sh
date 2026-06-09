@@ -5,6 +5,7 @@ set -eu
 WEB_ROOT="/usr/local/home/www/womo"
 CGI_DIR="$WEB_ROOT/cgi-bin"
 PERSISTENT_DATA_DIR="/usr/local/home/root/womo-data"
+GPS_DATA_DIR="$PERSISTENT_DATA_DIR/gps"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
@@ -135,7 +136,9 @@ set_permissions() {
   status "Setting executable permissions"
 
   chmod 755 "$CGI_DIR/gps.json"
+  chmod 755 "$CGI_DIR/gps_export.cgi"
   chmod 755 "$CGI_DIR/gps_track.cgi"
+  chmod 644 "$CGI_DIR/gps_lib.sh"
   chmod 755 "$SYNC_SCRIPT"
 }
 
@@ -171,11 +174,13 @@ configure_uhttpd() {
 need_file "$WEB_SOURCE/index.html"
 need_file "$WEB_SOURCE/map.html"
 need_file "$WEB_SOURCE/cgi-bin/gps.json"
+need_file "$WEB_SOURCE/cgi-bin/gps_export.cgi"
+need_file "$WEB_SOURCE/cgi-bin/gps_lib.sh"
 need_file "$WEB_SOURCE/cgi-bin/gps_track.cgi"
 need_file "$SYNC_SOURCE"
 
 status "Creating target directories"
-mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
+mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
 
 install_web_files
 install_leaflet
