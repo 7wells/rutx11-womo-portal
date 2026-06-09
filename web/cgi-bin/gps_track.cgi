@@ -9,6 +9,10 @@ QUERY="${QUERY_STRING:-}"
 
 RANGE="1h"
 
+is_number() {
+  awk -v value="$1" 'BEGIN { exit(value ~ /^-?[0-9]+(\.[0-9]+)?$/ ? 0 : 1) }'
+}
+
 # The frontend selects how much track history should be returned.
 case "$QUERY" in
   *range=24h*)
@@ -23,6 +27,11 @@ LAT="$(gpsctl -i 2>/dev/null || true)"
 LON="$(gpsctl -x 2>/dev/null || true)"
 
 if [ -z "$LAT" ] || [ -z "$LON" ]; then
+  printf 'Content-Type: application/json\r\n\r\n[]\n'
+  exit 0
+fi
+
+if ! is_number "$LAT" || ! is_number "$LON"; then
   printf 'Content-Type: application/json\r\n\r\n[]\n'
   exit 0
 fi
@@ -45,11 +54,12 @@ ADD_POINT=1
 # Avoid writing near-duplicate points while the vehicle is stationary.
 if [ -n "$LAST_LAT" ] && [ -n "$LAST_LON" ]; then
 
-  DISTANCE="$(awk \
-    -v lat1="$LAT" \
-    -v lon1="$LON" \
-    -v lat2="$LAST_LAT" \
-    -v lon2="$LAST_LON" '
+  if is_number "$LAST_LAT" && is_number "$LAST_LON"; then
+    DISTANCE="$(awk \
+      -v lat1="$LAT" \
+      -v lon1="$LON" \
+      -v lat2="$LAST_LAT" \
+      -v lon2="$LAST_LON" '
 BEGIN {
   dlat=(lat1-lat2)*111320;
   dlon=(lon1-lon2)*111320*cos(lat1/57.29578);
@@ -57,10 +67,11 @@ BEGIN {
   print dist;
 }')"
 
-  DISTANCE_INT="${DISTANCE%.*}"
+    DISTANCE_INT="${DISTANCE%.*}"
 
-  if [ "$DISTANCE_INT" -lt "$MIN_DISTANCE" ]; then
-    ADD_POINT=0
+    if [ "$DISTANCE_INT" -lt "$MIN_DISTANCE" ]; then
+      ADD_POINT=0
+    fi
   fi
 fi
 
@@ -75,7 +86,11 @@ TMP_FILE="/tmp/womo/live.tmp"
 
 # Keep live storage small; longer history is served from persistent storage.
 awk -F',' -v limit="$ONE_HOUR_AGO" '
-NF == 3 && $1 >= limit
+function valid_number(value) {
+  return value ~ /^-?[0-9]+(\.[0-9]+)?$/
+}
+
+NF == 3 && valid_number($1) && valid_number($2) && valid_number($3) && $1 >= limit
 ' "$LIVE_TRACK" > "$TMP_FILE"
 
 mv "$TMP_FILE" "$LIVE_TRACK"
@@ -107,7 +122,11 @@ printf '['
 FIRST=1
 
 awk -F',' -v limit="$LIMIT_TS" '
-NF == 3 && $1 >= limit
+function valid_number(value) {
+  return value ~ /^-?[0-9]+(\.[0-9]+)?$/
+}
+
+NF == 3 && valid_number($1) && valid_number($2) && valid_number($3) && $1 >= limit
 ' "$SOURCE_FILE" |
 
 while IFS=',' read -r TS LAT_V LON_V

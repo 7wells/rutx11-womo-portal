@@ -5,5 +5,16 @@ LON="$(gpsctl -x 2>/dev/null || true)"
 STATUS="$(gpsctl -s 2>/dev/null || true)"
 TIME="$(gpsctl -e 2>/dev/null || true)"
 
+json_string() {
+  printf '%s' "$1" \
+    | tr -d '\r\n' \
+    | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+LAT_JSON="$(json_string "$LAT")"
+LON_JSON="$(json_string "$LON")"
+STATUS_JSON="$(json_string "$STATUS")"
+TIME_JSON="$(json_string "$TIME")"
+
 printf 'Content-Type: application/json\r\n\r\n'
-printf '{"latitude":"%s","longitude":"%s","status":"%s","datetime":"%s"}\n' "$LAT" "$LON" "$STATUS" "$TIME"
+printf '{"latitude":"%s","longitude":"%s","status":"%s","datetime":"%s"}\n' "$LAT_JSON" "$LON_JSON" "$STATUS_JSON" "$TIME_JSON"
