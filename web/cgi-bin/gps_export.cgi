@@ -22,6 +22,16 @@ if ! validate_date_range "$FROM_DATE" "$TO_DATE"; then
   exit 0
 fi
 
+FROM_TS="$(date_start_ts "$FROM_DATE")" || {
+  send_json_error "400 Bad Request" "from and to must use YYYY-MM-DD"
+  exit 0
+}
+
+TO_TS="$(date_end_ts "$TO_DATE")" || {
+  send_json_error "400 Bad Request" "from and to must use YYYY-MM-DD"
+  exit 0
+}
+
 case "$FORMAT" in
   csv|gpx)
     ;;
@@ -34,15 +44,7 @@ esac
 ensure_gps_dirs
 
 emit_points() {
-  cat "$LIVE_TRACK" "$LEGACY_TRACK" "$GPS_DIR"/*.csv 2>/dev/null |
-    awk -F',' -v from="$FROM_TS" -v to="$TO_TS" '
-      function valid_number(value) {
-        return value ~ /^-?[0-9]+(\.[0-9]+)?$/
-      }
-
-      NF == 3 && valid_number($1) && valid_number($2) && valid_number($3) && $1 >= from && $1 <= to
-    ' |
-    sort -t',' -k1,1n -u
+  emit_gps_points "$FROM_TS" "$TO_TS"
 }
 
 if [ "$FORMAT" = "csv" ]; then
@@ -53,7 +55,7 @@ if [ "$FORMAT" = "csv" ]; then
   emit_points |
     while IFS=',' read -r TS LAT LON
     do
-      TIME="$(epoch_to_gpx_utc "$TS" 2>/dev/null || true)"
+      TIME="$(epoch_to_berlin_iso "$TS" 2>/dev/null || true)"
       printf '%s,%s,%s,%s\n' "$TS" "$TIME" "$LAT" "$LON"
     done
 
@@ -71,7 +73,7 @@ printf '%s\n' '    <trkseg>'
 emit_points |
   while IFS=',' read -r TS LAT LON
   do
-    TIME="$(epoch_to_gpx_utc "$TS" 2>/dev/null || true)"
+    TIME="$(epoch_to_berlin_iso "$TS" 2>/dev/null || true)"
 
     printf '      <trkpt lat="%s" lon="%s">' "$LAT" "$LON"
     if [ -n "$TIME" ]; then

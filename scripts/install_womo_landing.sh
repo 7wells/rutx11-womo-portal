@@ -4,7 +4,8 @@ set -eu
 
 WEB_ROOT="/usr/local/home/www/womo"
 CGI_DIR="$WEB_ROOT/cgi-bin"
-PERSISTENT_DATA_DIR="/usr/local/home/root/womo-data"
+PERSISTENT_DATA_DIR="/usr/local/home/womo-data"
+LEGACY_PERSISTENT_DATA_DIR="/usr/local/home/root/womo-data"
 GPS_DATA_DIR="$PERSISTENT_DATA_DIR/gps"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
@@ -132,6 +133,28 @@ install_sync_script() {
   chmod 755 "$SYNC_SCRIPT"
 }
 
+migrate_legacy_data() {
+  status "Migrating legacy GPS data if needed"
+
+  [ -d "$LEGACY_PERSISTENT_DATA_DIR" ] || return 0
+
+  if [ -f "$LEGACY_PERSISTENT_DATA_DIR/gps_track.log" ] && [ ! -f "$PERSISTENT_DATA_DIR/gps_track.log" ]; then
+    cp "$LEGACY_PERSISTENT_DATA_DIR/gps_track.log" "$PERSISTENT_DATA_DIR/gps_track.log"
+  fi
+
+  if [ -d "$LEGACY_PERSISTENT_DATA_DIR/gps" ]; then
+    find "$LEGACY_PERSISTENT_DATA_DIR/gps" -type f -name '*.csv' | while IFS= read -r file; do
+      target="$GPS_DATA_DIR/$(basename "$file")"
+
+      if [ -f "$target" ]; then
+        cat "$file" >> "$target"
+      else
+        cp "$file" "$target"
+      fi
+    done
+  fi
+}
+
 set_permissions() {
   status "Setting executable permissions"
 
@@ -140,6 +163,10 @@ set_permissions() {
   chmod 755 "$CGI_DIR/gps_track.cgi"
   chmod 644 "$CGI_DIR/gps_lib.sh"
   chmod 755 "$SYNC_SCRIPT"
+  chmod 755 "$PERSISTENT_DATA_DIR"
+  chmod 755 "$GPS_DATA_DIR"
+  find "$GPS_DATA_DIR" -type f -name '*.csv' -exec chmod 644 {} \; 2>/dev/null || true
+  [ ! -f "$PERSISTENT_DATA_DIR/gps_track.log" ] || chmod 644 "$PERSISTENT_DATA_DIR/gps_track.log"
 }
 
 install_cron() {
@@ -183,9 +210,11 @@ status "Creating target directories"
 mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
 
 install_web_files
+migrate_legacy_data
 install_leaflet
 install_sync_script
 set_permissions
+"$SYNC_SCRIPT" >/dev/null 2>&1 || true
 install_cron
 configure_uhttpd
 

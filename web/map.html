@@ -255,6 +255,8 @@
     const marker = L.marker([51.0, 10.0]).addTo(map);
     let historyLine = null;
     let historyMarkers = [];
+    let historyRequestId = 0;
+    let activeHistoryLatLngs = [];
     let firstFix = true;
     let lastLat = null;
     let lastLon = null;
@@ -268,7 +270,9 @@
     resetButton.addEventListener('click', function (event) {
       event.preventDefault();
 
-      if (lastLat !== null && lastLon !== null) {
+      if (activeHistoryLatLngs.length > 0) {
+        fitHistory(activeHistoryLatLngs);
+      } else if (lastLat !== null && lastLon !== null) {
         map.setView([lastLat, lastLon], DEFAULT_ZOOM);
       } else {
         map.setZoom(DEFAULT_ZOOM);
@@ -369,48 +373,101 @@
       return '/cgi-bin/gps_track.cgi?range=' + currentRange + '&_=' + Date.now();
     }
 
-    async function updateHistory() {
+    function fitHistory(latlngs) {
+      if (latlngs.length === 1) {
+        map.setView(latlngs[0], DEFAULT_ZOOM);
+        return;
+      }
+
+      map.fitBounds(L.latLngBounds(latlngs), {
+        paddingTopLeft: [16, 92],
+        paddingBottomRight: [16, 16],
+        maxZoom: DEFAULT_ZOOM
+      });
+    }
+
+    function clearHistoryLayers() {
+      if (historyLine) {
+        map.removeLayer(historyLine);
+        historyLine = null;
+      }
+
+      historyMarkers.forEach(function(item) {
+        map.removeLayer(item);
+      });
+
+      historyMarkers = [];
+      activeHistoryLatLngs = [];
+    }
+
+    function normalizeHistory(history) {
+      if (!Array.isArray(history)) return [];
+
+      return history.map(function(point) {
+        const lat = Number(point.lat);
+        const lon = Number(point.lon);
+
+        if (!isFinite(lat) || !isFinite(lon)) {
+          return null;
+        }
+
+        return [lat, lon];
+      }).filter(function(point) {
+        return point !== null;
+      });
+    }
+
+    async function updateHistory(options) {
+      const shouldFit = options && options.fit;
+      const requestId = historyRequestId + 1;
+      const url = historyUrl();
+      historyRequestId = requestId;
+
       try {
-        const response = await fetch(historyUrl());
+        const response = await fetch(url);
         if (!response.ok) throw new Error('GPS history HTTP ' + response.status);
 
         const history = await response.json();
 
-        if (historyLine) {
-          map.removeLayer(historyLine);
-        }
-
-        historyMarkers.forEach(function(item) {
-          map.removeLayer(item);
-        });
-
-        historyMarkers = [];
-
-        if (!Array.isArray(history) || history.length < 2) {
+        if (requestId !== historyRequestId) {
           return;
         }
 
-        const latlngs = history.map(function(point) {
-          return [point.lat, point.lon];
-        });
+        clearHistoryLayers();
 
-        historyLine = L.polyline(latlngs, {
-          color: '#60a5fa',
-          weight: 3,
-          opacity: 0.7
-        }).addTo(map);
+        const latlngs = normalizeHistory(history);
+        if (latlngs.length < 1) {
+          return;
+        }
 
-        history.forEach(function(point) {
-          const circle = L.circleMarker([point.lat, point.lon], {
-            radius: 4,
-            color: '#93c5fd',
-            fillColor: '#93c5fd',
-            fillOpacity: 0.8,
-            weight: 1
+        activeHistoryLatLngs = latlngs;
+
+        if (latlngs.length >= 2) {
+          historyLine = L.polyline(latlngs, {
+            color: '#60a5fa',
+            weight: 3,
+            opacity: 0.7
           }).addTo(map);
 
+          historyLine.bringToFront();
+        }
+
+        latlngs.forEach(function(point) {
+          const circle = L.circleMarker(point, {
+            radius: 6,
+            color: '#1d4ed8',
+            fillColor: '#60a5fa',
+            fillOpacity: 0.8,
+            weight: 2
+          }).addTo(map);
+
+          circle.bringToFront();
           historyMarkers.push(circle);
         });
+
+        if (shouldFit) {
+          fitHistory(latlngs);
+        }
 
       } catch (err) {
         console.warn('GPS history update failed', err);
@@ -464,7 +521,7 @@
         customTo = '';
         rangeError.textContent = '';
         setExportState(false);
-        updateHistory();
+        updateHistory({ fit: true });
       });
     });
 
@@ -475,16 +532,18 @@
         });
 
         if (validateCustomRange()) {
-          updateHistory();
+          updateHistory({ fit: true });
         }
       });
     });
 
     updateGPS();
-    updateHistory();
+    updateHistory({ fit: true });
 
     setInterval(updateGPS, 5000);
-    setInterval(updateHistory, 5000);
+    setInterval(function() {
+      updateHistory({ fit: false });
+    }, 5000);
   </script>
 </body>
 </html>

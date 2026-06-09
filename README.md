@@ -30,38 +30,56 @@ cd /tmp
 wget -O womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
 tar -xzf womo.tar.gz
 cd rutx11-womo-portal-main
-./scripts/install_womo_landing.sh
+sh scripts/install_womo_landing.sh
 ```
 
 Restore after a firmware update:
 - Copy or download this repository to the router again.
-- Run `./scripts/install_womo_landing.sh`.
+- Run `sh scripts/install_womo_landing.sh`.
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
-  enables the CGI scripts, prepares `/usr/local/home/root/womo-data`, and
+  enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
   configures uhttpd on port 8080.
 - Existing GPS history in `/usr/local/home/root/womo-data/gps_track.log` is not
   overwritten by the installer and is migrated into monthly files by the sync
   script.
+- Existing monthly GPS files in `/usr/local/home/root/womo-data/gps` are copied
+  to `/usr/local/home/womo-data/gps` during installation. Legacy files are not
+  deleted automatically.
 
 Runtime data:
 - live GPS track:
   /tmp/womo/gps_track_live.log
 
 - persistent GPS track:
-  /usr/local/home/root/womo-data/gps_track.log
+  /usr/local/home/womo-data/gps_track.log
 
 - monthly GPS track files:
-  /usr/local/home/root/womo-data/gps/YYYY-MM.csv
+  /usr/local/home/womo-data/gps/YYYY-MM.csv
 
 - persistent GPS retention:
   365 days.
+
+- date range selection:
+  selected days are interpreted as Europe/Berlin local days, including the
+  complete end day until 23:59:59 local time.
+
+- exports:
+  CSV contains `timestamp,datetime,latitude,longitude`; GPX uses ISO timestamps
+  with the Europe/Berlin UTC offset.
 
 Installed paths:
 - web root:
   /usr/local/home/www/womo
 
 - persistent data:
+  /usr/local/home/womo-data
+
+- legacy persistent data source:
   /usr/local/home/root/womo-data
+
+- web data directory:
+  none; runtime GPS data is not stored under `/www` or
+  `/usr/local/home/www/womo/data`.
 
 Test URLs:
 - http://10.10.10.2:8080/

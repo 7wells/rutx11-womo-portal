@@ -16,9 +16,6 @@ fi
 . "$GPS_LIB"
 
 LIVE_TRACK="${WOMO_LIVE_TRACK:-/tmp/womo/gps_track_live.log}"
-DATA_DIR="${WOMO_DATA_DIR:-/usr/local/home/root/womo-data}"
-GPS_DIR="${WOMO_GPS_DIR:-$DATA_DIR/gps}"
-LEGACY_TRACK="${WOMO_LEGACY_TRACK:-$DATA_DIR/gps_track.log}"
 TMP_DIR="${WOMO_TMP_DIR:-/tmp/womo}"
 TMP_SORTED="$TMP_DIR/gps_track_sync_sorted.tmp"
 TMP_LIVE="$TMP_DIR/gps_track_live.tmp"
@@ -37,11 +34,24 @@ touch "$LEGACY_TRACK"
 # Merge all known track sources and keep 365 days.
 cat "$LEGACY_TRACK" "$LIVE_TRACK" "$GPS_DIR"/*.csv 2>/dev/null \
   | awk -F',' -v limit="$RETENTION_LIMIT" '
+      function trim(value) {
+        gsub(/^[ \t\r]+|[ \t\r]+$/, "", value)
+        return value
+      }
+
       function valid_number(value) {
         return value ~ /^-?[0-9]+(\.[0-9]+)?$/
       }
 
-      NF == 3 && valid_number($1) && valid_number($2) && valid_number($3) && $1 >= limit
+      NF == 3 {
+        ts = trim($1)
+        lat = trim($2)
+        lon = trim($3)
+
+        if (valid_number(ts) && valid_number(lat) && valid_number(lon) && ts >= limit) {
+          print ts "," lat "," lon
+        }
+      }
     ' \
   | sort -t',' -k1,1n -u \
   > "$TMP_SORTED"
@@ -56,11 +66,24 @@ done < "$TMP_SORTED"
 
 # Keep live storage small; longer history is served from monthly files.
 awk -F',' -v limit="$LIVE_LIMIT" '
+  function trim(value) {
+    gsub(/^[ \t\r]+|[ \t\r]+$/, "", value)
+    return value
+  }
+
   function valid_number(value) {
     return value ~ /^-?[0-9]+(\.[0-9]+)?$/
   }
 
-  NF == 3 && valid_number($1) && valid_number($2) && valid_number($3) && $1 >= limit
+  NF == 3 {
+    ts = trim($1)
+    lat = trim($2)
+    lon = trim($3)
+
+    if (valid_number(ts) && valid_number(lat) && valid_number(lon) && ts >= limit) {
+      print ts "," lat "," lon
+    }
+  }
 ' "$LIVE_TRACK" > "$TMP_LIVE"
 
 mv "$TMP_LIVE" "$LIVE_TRACK"
