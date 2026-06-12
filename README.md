@@ -5,7 +5,7 @@ Standalone local web portal for a Teltonika RUTX11 router.
 Use at your own risk. This project is provided as-is and without warranty.
 
 Features:
-- Mobile-friendly landing page
+- Mobile-friendly map landing page
 - OpenStreetMap live GPS map
 - GPS tracking UI (Live / 24h / 4w)
 - Date range selection and CSV/GPX export
@@ -87,7 +87,6 @@ Installed paths:
 
 Test URLs:
 - http://10.10.10.2:8080/
-- http://10.10.10.2:8080/map.html
 - http://10.10.10.2:8080/cgi-bin/gps_track.cgi
 - http://10.10.10.2:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
 - http://10.10.10.2:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv

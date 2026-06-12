@@ -6,6 +6,10 @@ gps_track*.log
 *.gpx
 *.kml
 
+# Local tool artifacts
+.playwright-cli/
+.vscode/
+
 # OS files
 Thumbs.db
 Desktop.ini

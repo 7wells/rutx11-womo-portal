@@ -209,7 +209,6 @@ configure_uhttpd() {
 }
 
 need_file "$WEB_SOURCE/index.html"
-need_file "$WEB_SOURCE/map.html"
 need_file "$WEB_SOURCE/cgi-bin/gps.json"
 need_file "$WEB_SOURCE/cgi-bin/gps_export.cgi"
 need_file "$WEB_SOURCE/cgi-bin/gps_lib.sh"
