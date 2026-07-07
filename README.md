@@ -12,16 +12,8 @@ and a local tilt/level page for an ESP32-based vehicle sensor.
 
 Deploying the portal means copying this repository to the router and running
 one installer script. The same deploy command is used for first setup, later
-updates, and redeployment after router changes:
-
-```sh
-cd /tmp
-wget -O womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
-tar -xzf womo.tar.gz
-cd rutx11-womo-portal-main
-# Optional: edit web/portal-config.js if your device URLs differ.
-sh scripts/install_womo_landing.sh
-```
+updates, and redeployment after router changes. See
+[Deploy on the RUTX11](#deploy-on-the-rutx11).
 
 If your local device addresses differ, edit `web/portal-config.js` before
 running the installer. See [Local device URLs](#local-device-urls).
@@ -40,7 +32,8 @@ router through a tunnel.
 
 ## Details
 
-Features:
+### Features
+
 - Mobile-friendly map landing page
 - OpenStreetMap live GPS map
 - GPS tracking UI (Live / 24h / 4w)
@@ -51,7 +44,8 @@ Features:
 - Lightweight CGI backend
 - Flash-friendly GPS persistence design
 
-Project structure:
+### Project structure
+
 - web/
   - HTML frontend
   - CGI scripts
@@ -65,7 +59,8 @@ Project structure:
   - GPS track sync script
   - private data safety check
 
-Local device URLs:
+### Local device URLs
+
 - Edit `web/portal-config.js` before deployment if your RUTX11, ESP32 Main, or
   Truma/Smartavan use different local URLs.
 - The file configures only links to local devices, not the portal URL itself.
@@ -74,16 +69,19 @@ Local device URLs:
 - The default values match one common local setup, but they may need adjustment
   for your network.
 
-Deploy on the RUTX11:
+### Deploy on the RUTX11
+
 ```sh
 cd /tmp
 wget -O womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
 tar -xzf womo.tar.gz
 cd rutx11-womo-portal-main
+# Optional: edit web/portal-config.js if your device URLs differ.
 sh scripts/install_womo_landing.sh
 ```
 
-Deployment notes:
+### Deployment notes
+
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
   enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
   configures uhttpd on port 8080.
@@ -96,7 +94,8 @@ Deployment notes:
   to `/usr/local/home/womo-data/gps` during installation. Legacy files are not
   deleted automatically.
 
-Runtime data:
+### Runtime data
+
 - live GPS track:
   /tmp/womo/gps_track_live.log
 
@@ -120,7 +119,8 @@ Runtime data:
   CSV contains `timestamp,datetime,latitude,longitude`; GPX uses ISO timestamps
   with the Europe/Berlin UTC offset.
 
-Installed paths:
+### Installed paths
+
 - web root:
   /usr/local/home/www/womo
 
@@ -138,7 +138,8 @@ Installed paths:
   none; runtime GPS data is not stored under `/www` or
   `/usr/local/home/www/womo/data`.
 
-Useful URLs:
+### Useful URLs
+
 - Portal:
   - http://ROUTER_IP:8080/
 
