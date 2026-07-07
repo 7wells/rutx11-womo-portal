@@ -24,9 +24,7 @@ sh scripts/install_womo_landing.sh
 ```
 
 If your local device addresses differ, edit `web/portal-config.js` before
-running the installer. It contains the links to the RUTX11 web UI, ESP32 Main,
-and Truma/Smartavan. The portal URL itself is not configured there; open it
-through whichever router address is reachable from your device.
+running the installer. See [Local device URLs](#local-device-urls).
 
 The installer is designed to keep existing GPS track data under
 `/usr/local/home/womo-data`. As with any router maintenance, keep a backup if
@@ -67,6 +65,15 @@ Project structure:
   - GPS track sync script
   - private data safety check
 
+Local device URLs:
+- Edit `web/portal-config.js` before deployment if your RUTX11, ESP32 Main, or
+  Truma/Smartavan use different local URLs.
+- The file configures only links to local devices, not the portal URL itself.
+- Open the portal through whichever router address is reachable from your
+  device, for example a LAN address or a VPN address.
+- The default values match one common local setup, but they may need adjustment
+  for your network.
+
 Deploy on the RUTX11:
 ```sh
 cd /tmp
@@ -77,8 +84,6 @@ sh scripts/install_womo_landing.sh
 ```
 
 Deployment notes:
-- Edit `web/portal-config.js` before deployment if your RUTX11, ESP32 Main, or
-  Truma/Smartavan use different local URLs.
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
   enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
   configures uhttpd on port 8080.
@@ -137,18 +142,18 @@ Useful URLs:
 - Portal:
   - http://ROUTER_IP:8080/
 
+- GPS diagnostics and export checks:
+  - http://ROUTER_IP:8080/cgi-bin/gps_track.cgi
+  - http://ROUTER_IP:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
+  - http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv
+  - http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=gpx
+
 - Tilt page:
   - http://ROUTER_IP:8080/tilt.html
   - http://ROUTER_IP:8080/tilt.html?demo=1
 
   The tilt page is optional and needs a compatible ESP32 Main endpoint for live
   values. Use `?demo=1` only to check the layout without live ESP32 data.
-
-- GPS diagnostics and export checks:
-  - http://ROUTER_IP:8080/cgi-bin/gps_track.cgi
-  - http://ROUTER_IP:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
-  - http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv
-  - http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=gpx
 
 - Tilt calibration diagnostics:
   - http://ROUTER_IP:8080/cgi-bin/tilt_calibration.cgi
