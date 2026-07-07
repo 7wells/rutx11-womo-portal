@@ -28,7 +28,7 @@ the existing data matters to you.
 
 Open the portal after deployment:
 
-- http://<router-ip>:8080/
+- http://ROUTER_IP:8080/
 
 Use the router address that is reachable from your device. For example, this
 may be a LAN address such as `192.168.11.1` or a VPN address if you access the
@@ -124,11 +124,11 @@ Installed paths:
   `/usr/local/home/www/womo/data`.
 
 Test URLs:
-- http://<router-ip>:8080/
-- http://<router-ip>:8080/tilt.html
-- http://<router-ip>:8080/tilt.html?demo=1
-- http://<router-ip>:8080/cgi-bin/gps_track.cgi
-- http://<router-ip>:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
-- http://<router-ip>:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv
-- http://<router-ip>:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=gpx
-- http://<router-ip>:8080/cgi-bin/tilt_calibration.cgi
+- http://ROUTER_IP:8080/
+- http://ROUTER_IP:8080/tilt.html
+- http://ROUTER_IP:8080/tilt.html?demo=1
+- http://ROUTER_IP:8080/cgi-bin/gps_track.cgi
+- http://ROUTER_IP:8080/cgi-bin/gps_track.cgi?from=2026-06-01&to=2026-06-09
+- http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=csv
+- http://ROUTER_IP:8080/cgi-bin/gps_export.cgi?from=2026-06-01&to=2026-06-09&format=gpx
+- http://ROUTER_IP:8080/cgi-bin/tilt_calibration.cgi
