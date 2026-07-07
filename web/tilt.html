@@ -223,7 +223,7 @@
     <header>
       <h1>WoMo Neigung</h1>
       <div class="header-actions">
-        <a class="nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
+        <a id="esp32MainLink" class="nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
         <a class="nav-link" href="index.html">Karte</a>
       </div>
     </header>
@@ -266,9 +266,11 @@
     </section>
   </main>
 
+  <script src="portal-config.js"></script>
   <script src="tilt-config.js"></script>
   <script>
-    const MAIN_URL = 'http://192.168.11.3';
+    const PORTAL_CONFIG = window.WOMO_PORTAL_CONFIG || {};
+    const MAIN_URL = normalizeBaseUrl(PORTAL_CONFIG.esp32MainUrl || 'http://192.168.11.3/');
     const EVENT_URL = `${MAIN_URL}/events`;
     const MAX_TILT_DEGREES = 10;
     const HINT_THRESHOLD = 0.3;
@@ -306,6 +308,7 @@
     const statusElement = document.getElementById('status');
     const statusDotElement = document.getElementById('statusDot');
     const statusHelpElement = document.getElementById('statusHelp');
+    const esp32MainLink = document.getElementById('esp32MainLink');
 
     let source = null;
     let connectionTimer = null;
@@ -315,6 +318,12 @@
     let calibrationSaveQueue = Promise.resolve();
     let calibrationSaveVersion = 0;
     const pendingCalibrationAxes = new Set();
+
+    esp32MainLink.href = `${MAIN_URL}/`;
+
+    function normalizeBaseUrl(url) {
+      return String(url || '').trim().replace(/\/+$/, '');
+    }
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));

@@ -412,10 +412,10 @@
 
     <div class="toolbar-row">
       <nav class="nav-links" aria-label="Navigation">
-        <a class="nav-link" href="https://192.168.11.1" target="_blank" rel="noopener noreferrer">RUTX11</a>
+        <a id="routerGuiLink" class="nav-link" href="https://192.168.11.1" target="_blank" rel="noopener noreferrer">RUTX11</a>
         <a id="googlemaps" class="nav-link disabled" href="#" target="_blank" rel="noopener noreferrer">Google Maps</a>
         <a class="nav-link" href="tilt.html" target="_blank" rel="noopener noreferrer">Tilt</a>
-        <a class="nav-link" href="http://192.168.11.4" target="_blank" rel="noopener noreferrer">Truma</a>
+        <a id="trumaLink" class="nav-link" href="http://192.168.11.4" target="_blank" rel="noopener noreferrer">Truma</a>
       </nav>
 
       <div class="track-tabs">
@@ -437,9 +437,11 @@
   <div id="map"></div>
   <div id="mapDataOverlay" class="map-data-overlay visible" aria-hidden="true"></div>
 
+  <script src="portal-config.js"></script>
   <script src="/assets/leaflet/leaflet.js"></script>
 
   <script>
+    const PORTAL_CONFIG = window.WOMO_PORTAL_CONFIG || {};
     const DEFAULT_ZOOM = 16;
     const MAX_ZOOM = 19;
     const MAX_RANGE_DAYS = 365;
@@ -498,6 +500,16 @@
     const gpxExport = document.getElementById('gpxExport');
     const mapDataOverlay = document.getElementById('mapDataOverlay');
     const infoPanel = document.querySelector('.info');
+    const routerGuiLink = document.getElementById('routerGuiLink');
+    const trumaLink = document.getElementById('trumaLink');
+
+    function configuredUrl(value, fallback) {
+      const text = String(value || fallback || '').trim();
+      return text || fallback;
+    }
+
+    routerGuiLink.href = configuredUrl(PORTAL_CONFIG.routerGuiUrl, routerGuiLink.href);
+    trumaLink.href = configuredUrl(PORTAL_CONFIG.trumaUrl, trumaLink.href);
 
     function syncMapSize() {
       const viewport = window.visualViewport;
