@@ -26,6 +26,20 @@
       min-height: 100dvh;
     }
 
+    .map-data-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 500;
+      pointer-events: none;
+      background: rgba(11, 19, 43, 0.25);
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .map-data-overlay.visible {
+      opacity: 1;
+    }
+
     .info {
       position: absolute;
       z-index: 1000;
@@ -88,6 +102,11 @@
       font-size: 0.76rem;
       font-weight: 700;
       white-space: nowrap;
+    }
+
+    .nav-link.disabled {
+      opacity: 0.42;
+      pointer-events: none;
     }
 
     .gps-row {
@@ -173,7 +192,7 @@
     }
 
     .track-tab {
-      border: 0;
+      border: 1px solid transparent;
       border-radius: 999px;
       padding: 4px 8px;
       background: rgba(255,255,255,0.16);
@@ -183,8 +202,16 @@
     }
 
     .track-tab.active {
+      border-color: rgba(0,0,0,.62);
       background: #2563eb;
       color: white;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.16) inset;
+    }
+
+    .track-tab:disabled,
+    .range-row input:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
     }
 
     .leaflet-bottom.leaflet-right {
@@ -208,6 +235,25 @@
     .map-action.disabled {
       color: #9ca3af;
       pointer-events: none;
+    }
+
+    .last-position-marker {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 0;
+      background: #6b7280;
+      color: white;
+      font: 800 16px/1 system-ui, sans-serif;
+      box-shadow: 0 2px 7px rgba(0,0,0,.45);
+      transform: rotate(-45deg);
+    }
+
+    .last-position-marker span {
+      transform: rotate(45deg);
     }
 
     @media (prefers-color-scheme: light) {
@@ -366,10 +412,10 @@
 
     <div class="toolbar-row">
       <nav class="nav-links" aria-label="Navigation">
-        <a id="googlemaps" class="nav-link" href="#" target="_blank" rel="noopener noreferrer">Google Maps</a>
-        <a class="nav-link" href="https://192.168.11.1" target="_blank" rel="noopener noreferrer">GUI</a>
-        <a class="nav-link" href="http://192.168.11.3" target="_blank" rel="noopener noreferrer">Main</a>
-        <a class="nav-link" href="http://192.168.11.4" target="_blank" rel="noopener noreferrer">Smartavan</a>
+        <a class="nav-link" href="https://192.168.11.1" target="_blank" rel="noopener noreferrer">RUTX11</a>
+        <a id="googlemaps" class="nav-link disabled" href="#" target="_blank" rel="noopener noreferrer">Google Maps</a>
+        <a class="nav-link" href="tilt.html" target="_blank" rel="noopener noreferrer">Tilt</a>
+        <a class="nav-link" href="http://192.168.11.4" target="_blank" rel="noopener noreferrer">Truma</a>
       </nav>
 
       <div class="track-tabs">
@@ -389,6 +435,7 @@
   </div>
 
   <div id="map"></div>
+  <div id="mapDataOverlay" class="map-data-overlay visible" aria-hidden="true"></div>
 
   <script src="/assets/leaflet/leaflet.js"></script>
 
@@ -423,7 +470,14 @@
     const zoomInButton = zoomControl._container.querySelector('.leaflet-control-zoom-in');
     const zoomOutButton = zoomControl._container.querySelector('.leaflet-control-zoom-out');
 
-    const marker = L.marker([51.0, 10.0]).addTo(map);
+    const marker = L.marker([51.0, 10.0]);
+    const lastPositionIcon = L.divIcon({
+      className: '',
+      html: '<div class="last-position-marker"><span>?</span></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 28]
+    });
+    const lastPositionMarker = L.marker([51.0, 10.0], { icon: lastPositionIcon });
     let historyLine = null;
     let historyMarkers = [];
     let historyRequestId = 0;
@@ -431,12 +485,18 @@
     let firstFix = true;
     let lastLat = null;
     let lastLon = null;
+    let hasCurrentGpsFix = false;
+    let lastHistoryLatLng = null;
 
     const fromDateInput = document.getElementById('fromDate');
     const toDateInput = document.getElementById('toDate');
+    const historyRangeButtons = Array.from(document.querySelectorAll('.track-tab')).filter(function(button) {
+      return button.dataset.range !== '1h';
+    });
     const rangeError = document.getElementById('rangeError');
     const csvExport = document.getElementById('csvExport');
     const gpxExport = document.getElementById('gpxExport');
+    const mapDataOverlay = document.getElementById('mapDataOverlay');
     const infoPanel = document.querySelector('.info');
 
     function syncMapSize() {
@@ -662,6 +722,67 @@
       fitButton.classList.toggle('disabled', activeHistoryLatLngs.length < 1);
     }
 
+    function setHistoryControlsEnabled(enabled) {
+      historyRangeButtons.forEach(function(button) {
+        button.disabled = !enabled;
+      });
+      fromDateInput.disabled = !enabled;
+      toDateInput.disabled = !enabled;
+      if (!enabled && currentRange !== '1h') {
+        currentRange = '1h';
+        setActiveRangeButton(currentRange);
+      }
+    }
+
+    function setActiveRangeButton(range) {
+      document.querySelectorAll('.track-tab').forEach(function(item) {
+        item.classList.toggle('active', item.dataset.range === range);
+      });
+    }
+
+    function setGoogleMapsPosition(latlng) {
+      const link = document.getElementById('googlemaps');
+      link.href = 'https://www.google.com/maps?q=' + latlng[0] + ',' + latlng[1];
+      link.classList.remove('disabled');
+    }
+
+    function clearGoogleMapsPosition() {
+      const link = document.getElementById('googlemaps');
+      link.href = '#';
+      link.classList.add('disabled');
+    }
+
+    function updateMapDataOverlay() {
+      mapDataOverlay.classList.toggle('visible', !hasCurrentGpsFix && !lastHistoryLatLng);
+    }
+
+    function showCurrentPosition(latlng) {
+      if (map.hasLayer(lastPositionMarker)) map.removeLayer(lastPositionMarker);
+      marker.setLatLng(latlng);
+      if (!map.hasLayer(marker)) marker.addTo(map);
+      setGoogleMapsPosition(latlng);
+      hasCurrentGpsFix = true;
+      updateMapDataOverlay();
+    }
+
+    function showLastKnownPosition(latlng) {
+      if (!latlng) return;
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+      lastPositionMarker.setLatLng(latlng);
+      if (!map.hasLayer(lastPositionMarker)) lastPositionMarker.addTo(map);
+      setGoogleMapsPosition(latlng);
+      hasCurrentGpsFix = false;
+      updateMapDataOverlay();
+    }
+
+    function hidePositionMarkers() {
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+      if (map.hasLayer(lastPositionMarker)) map.removeLayer(lastPositionMarker);
+      clearGoogleMapsPosition();
+      hasCurrentGpsFix = false;
+      updateMapDataOverlay();
+    }
+
     function clearHistoryLayers() {
       if (historyLine) {
         map.removeLayer(historyLine);
@@ -714,11 +835,18 @@
 
         const latlngs = normalizeHistory(history);
         if (latlngs.length < 1) {
+          lastHistoryLatLng = null;
+          if (!hasCurrentGpsFix) hidePositionMarkers();
+          updateMapDataOverlay();
+          setHistoryControlsEnabled(false);
           return;
         }
 
         activeHistoryLatLngs = latlngs;
+        lastHistoryLatLng = latlngs[latlngs.length - 1];
         updateFitButtonState();
+        updateMapDataOverlay();
+        setHistoryControlsEnabled(true);
 
         if (latlngs.length >= 2) {
           historyLine = L.polyline(latlngs, {
@@ -743,7 +871,14 @@
           historyMarkers.push(circle);
         });
 
-        if (shouldFit) {
+        if (!hasCurrentGpsFix && lastHistoryLatLng) {
+          showLastKnownPosition(lastHistoryLatLng);
+        }
+
+        if (!hasCurrentGpsFix && firstFix && lastHistoryLatLng) {
+          setViewBelowOverlay(lastHistoryLatLng, DEFAULT_ZOOM);
+          firstFix = false;
+        } else if (shouldFit) {
           fitHistory(latlngs);
         }
 
@@ -761,16 +896,19 @@
         const lon = parseFloat(data.longitude);
 
         if (isNaN(lat) || isNaN(lon)) {
-          document.getElementById('coords').textContent = 'Keine gültigen GPS-Daten';
+          document.getElementById('coords').textContent = lastHistoryLatLng ? 'GPS Fehler · letzte Position' : 'Keine gültigen GPS-Daten';
           document.getElementById('satfix').textContent = '-';
+          if (lastHistoryLatLng) {
+            showLastKnownPosition(lastHistoryLatLng);
+          } else {
+            hidePositionMarkers();
+          }
           return;
         }
 
         document.getElementById('coords').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
         document.getElementById('satfix').textContent = formatDateTime(data.datetime);
-        document.getElementById('googlemaps').href = 'https://www.google.com/maps?q=' + lat + ',' + lon;
-
-        marker.setLatLng([lat, lon]);
+        showCurrentPosition([lat, lon]);
         lastLat = lat;
         lastLon = lon;
 
@@ -780,19 +918,21 @@
         }
 
       } catch (err) {
-        document.getElementById('coords').textContent = 'GPS Fehler';
+        document.getElementById('coords').textContent = lastHistoryLatLng ? 'GPS Fehler · letzte Position' : 'GPS Fehler';
         document.getElementById('satfix').textContent = '-';
+        if (lastHistoryLatLng) {
+          showLastKnownPosition(lastHistoryLatLng);
+        } else {
+          hidePositionMarkers();
+        }
       }
     }
 
     document.querySelectorAll('.track-tab').forEach(function(button) {
       button.addEventListener('click', function() {
-        document.querySelectorAll('.track-tab').forEach(function(item) {
-          item.classList.remove('active');
-        });
-
-        button.classList.add('active');
+        if (button.disabled) return;
         currentRange = button.dataset.range;
+        setActiveRangeButton(currentRange);
         fromDateInput.value = '';
         toDateInput.value = '';
         customFrom = '';
@@ -823,6 +963,7 @@
       window.visualViewport.addEventListener('scroll', scheduleMapResize);
     }
 
+    setHistoryControlsEnabled(false);
     updateGPS();
     updateHistory({ fit: true });
 

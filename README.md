@@ -53,6 +53,9 @@ Runtime data:
 - persistent GPS track:
   /usr/local/home/womo-data/gps_track.log
 
+- persistent tilt calibration:
+  /usr/local/home/womo-data/tilt_calibration.json
+
 - monthly GPS track files:
   /usr/local/home/womo-data/gps/YYYY-MM.csv
 

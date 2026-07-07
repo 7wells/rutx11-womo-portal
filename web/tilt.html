@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>WoMo Tilt</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --panel: #162235;
+      --line: #52647c;
+      --muted: #aab7c8;
+      --accent: #53d88c;
+      --bubble: #d9ff55;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 280px;
+      min-height: 100svh;
+      margin: 0;
+      background: radial-gradient(circle at top, #1c304b 0, var(--bg) 52%);
+      color: #f7f9fc;
+    }
+
+    main {
+      width: min(100%, 520px);
+      margin: 0 auto;
+      padding: 14px max(12px, env(safe-area-inset-right)) 22px max(12px, env(safe-area-inset-left));
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    h1 { margin: 0; font-size: 1.2rem; }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .header-actions .nav-link {
+      min-height: 34px;
+      padding: 6px 8px;
+      font-size: .86rem;
+      white-space: nowrap;
+    }
+
+    .nav-link, button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 11px;
+      background: #21324a;
+      color: inherit;
+      font: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .readings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .reading, .level-card, .status-card {
+      border: 1px solid #33445a;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+    }
+
+    .reading { padding: 12px; text-align: center; }
+    .reading-label { color: var(--muted); font-size: .84rem; text-transform: uppercase; letter-spacing: .08em; }
+    .reading-value {
+      display: inline-block;
+      min-width: 5.1rem;
+      margin-top: 6px;
+      border: 1px solid #33445a;
+      border-radius: 10px;
+      padding: 4px 9px;
+      background: rgb(11 18 32 / 26%);
+      font-size: clamp(1.25rem, 6.4vw, 1.7rem);
+      font-variant-numeric: tabular-nums;
+    }
+    .zero-button { width: 100%; min-height: 32px; margin-top: 8px; padding: 5px 7px; color: var(--muted); font-size: .82rem; }
+    .zero-button.active {
+      border-color: var(--accent);
+      background: #16563a;
+      color: #eafff2;
+      box-shadow: 0 0 0 1px rgb(0 0 0 / 62%);
+    }
+    .zero-button:disabled { cursor: not-allowed; opacity: .55; }
+
+    .level-card { padding: 8px; }
+
+    .level {
+      position: relative;
+      width: min(90vw, 370px);
+      aspect-ratio: 1;
+      margin: 0 auto;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+
+    .level-dial {
+      position: absolute;
+      inset: 18%;
+      border: 3px solid #75869c;
+      border-radius: 50%;
+      background:
+        linear-gradient(90deg, transparent calc(50% - 1px), rgb(255 255 255 / 28%) 50%, transparent calc(50% + 1px)),
+        linear-gradient(transparent calc(50% - 1px), rgb(255 255 255 / 28%) 50%, transparent calc(50% + 1px)),
+        radial-gradient(circle, transparent 0 17%, rgb(255 255 255 / 22%) 17.5% 18%, transparent 18.5% 35%, rgb(255 255 255 / 14%) 35.5% 36%, transparent 36.5%),
+        #152b3d;
+      box-shadow: inset 0 0 35px rgb(0 0 0 / 45%);
+    }
+
+    .bubble {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 17%;
+      aspect-ratio: 1;
+      border: 2px solid #f6ffc3;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff 0 7%, var(--bubble) 13% 55%, #7ea52a 100%);
+      box-shadow: 0 3px 12px rgb(0 0 0 / 55%);
+      transform: translate(-50%, -50%);
+      transition: left 350ms ease-out, top 350ms ease-out;
+      z-index: 2;
+    }
+
+    .axis-label, .lift-marker {
+      position: absolute;
+      z-index: 3;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .axis-label { color: #b8c8dc; font-size: 1.25rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .axis-label.front { left: 50%; top: 7%; }
+    .axis-label.rear { left: 50%; top: 93%; }
+    .axis-label.left { left: 8%; top: 50%; }
+    .axis-label.right { left: 92%; top: 50%; }
+
+    .lift-marker {
+      min-width: 100px;
+      border: 1px solid #9fffc2;
+      border-radius: 999px;
+      padding: 5px 7px;
+      background: rgb(7 67 41 / 90%);
+      color: #baffd2;
+      font-size: .9rem;
+      font-weight: 750;
+      line-height: 1.08;
+      white-space: pre-line;
+      text-align: center;
+      transition: left 350ms ease-out, top 350ms ease-out;
+    }
+
+    .lift-marker.muted {
+      border-color: rgb(83 216 140 / 40%);
+      background: rgb(7 67 41 / 38%);
+      color: rgb(186 255 210 / 62%);
+    }
+
+    .lift-marker.ok {
+      border-color: #9fffc2;
+      background: rgb(7 67 41 / 90%);
+      color: #baffd2;
+    }
+
+    .lift-marker.warning {
+      border-color: #ffd76a;
+      background: rgb(121 82 12 / 92%);
+      color: #fff2be;
+    }
+
+    .lift-marker.critical {
+      border-color: #ff9a8a;
+      background: rgb(116 31 26 / 92%);
+      color: #ffe0dc;
+    }
+
+    .status-card { margin-top: 8px; padding: 8px 11px; }
+    .status-line { display: flex; align-items: center; gap: 8px; font-size: .84rem; }
+    .status-dot { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #e4a23a; }
+    .status-dot.online { background: var(--accent); }
+    .status-dot.error { background: #ff6b6b; }
+    .status-help { margin: 5px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.25; }
+    [hidden] { display: none !important; }
+
+    /* Strict mobile layout target: Samsung Galaxy A56 Firefox, 324 x 608 CSS px viewport. */
+    @media (max-width: 340px) {
+      main { padding-inline: 8px; }
+      .level-card { padding: 8px; }
+      .status-card { padding-block: 7px; }
+      .status-help { font-size: .7rem; line-height: 1.18; }
+      .nav-link, button { padding-inline: 8px; font-size: .85rem; }
+      .header-actions { gap: 5px; }
+      .header-actions .nav-link { padding-inline: 6px; font-size: .76rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bubble { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>WoMo Neigung</h1>
+      <div class="header-actions">
+        <a class="nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
+        <a class="nav-link" href="index.html">Karte</a>
+      </div>
+    </header>
+
+    <section class="readings" aria-label="Neigungswerte">
+      <div class="reading">
+        <span class="reading-label">Längsneigung</span>
+        <strong id="pitch" class="reading-value">-5.73°</strong>
+        <button id="pitchZero" class="zero-button" type="button">Nullpunkt setzen</button>
+      </div>
+      <div class="reading">
+        <span class="reading-label">Querneigung</span>
+        <strong id="roll" class="reading-value">-0.87°</strong>
+        <button id="rollZero" class="zero-button" type="button">Nullpunkt setzen</button>
+      </div>
+    </section>
+
+    <section class="level-card" aria-label="Libelle">
+      <div id="level" class="level" role="img" aria-label="Keine Neigungswerte verfügbar">
+        <div class="level-dial">
+          <span class="axis-label front">V</span>
+          <span class="axis-label rear">H</span>
+          <span class="axis-label left">L</span>
+          <span class="axis-label right">R</span>
+          <div id="bubble" class="bubble"></div>
+        </div>
+        <span id="liftMarker1" class="lift-marker" hidden>anheben</span>
+        <span id="liftMarker2" class="lift-marker" hidden>anheben</span>
+        <span id="liftMarker3" class="lift-marker" hidden>anheben</span>
+        <span id="liftMarker4" class="lift-marker" hidden>anheben</span>
+      </div>
+    </section>
+
+    <section class="status-card" aria-live="polite">
+      <div class="status-line">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="status">Verbinde mit ESP32 Main …</span>
+      </div>
+      <p id="statusHelp" class="status-help">Live-Daten benötigen einen maschinenlesbaren ESP32-Endpunkt.</p>
+    </section>
+  </main>
+
+  <script src="tilt-config.js"></script>
+  <script>
+    const MAIN_URL = 'http://192.168.11.3';
+    const EVENT_URL = `${MAIN_URL}/events`;
+    const MAX_TILT_DEGREES = 10;
+    const HINT_THRESHOLD = 0.3;
+    const CONNECTION_TIMEOUT_MS = 8000;
+    const LIFT_MARKER_LOW_X = 23;
+    const LIFT_MARKER_HIGH_X = 77;
+    const LIFT_MARKER_LOW_Y = 10;
+    const LIFT_MARKER_HIGH_Y = 90;
+    const DEMO_MODE = new URLSearchParams(window.location.search).has('demo');
+    const LOCAL_PREVIEW_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.protocol === 'file:';
+    const PREVIEW_MODE = DEMO_MODE || LOCAL_PREVIEW_MODE;
+    const CALIBRATION_URL = `/cgi-bin/tilt_calibration.cgi${PREVIEW_MODE ? '?demo=1' : ''}`;
+    const DEFAULT_CONFIG = {
+      wheelbaseMm: 4035,
+      frontTrackMm: 1810,
+      rearTrackMm: 1790,
+      longitudinal: { source: 'roll', factor: -1 },
+      transverse: { source: 'pitch', factor: 1 }
+    };
+    const VEHICLE_CONFIG = window.WOMO_TILT_CONFIG || DEFAULT_CONFIG;
+    const MOCK_SENSORS = createDemoSensors();
+
+    const pitchElement = document.getElementById('pitch');
+    const rollElement = document.getElementById('roll');
+    const bubbleElement = document.getElementById('bubble');
+    const levelElement = document.getElementById('level');
+    const pitchZeroButton = document.getElementById('pitchZero');
+    const rollZeroButton = document.getElementById('rollZero');
+    const liftMarkerElements = [
+      document.getElementById('liftMarker1'),
+      document.getElementById('liftMarker2'),
+      document.getElementById('liftMarker3'),
+      document.getElementById('liftMarker4')
+    ];
+    const statusElement = document.getElementById('status');
+    const statusDotElement = document.getElementById('statusDot');
+    const statusHelpElement = document.getElementById('statusHelp');
+
+    let source = null;
+    let connectionTimer = null;
+    const rawSensors = PREVIEW_MODE ? { ...MOCK_SENSORS } : { pitch: null, roll: null };
+    let calibration = { longitudinal: null, transverse: null };
+    let calibrationReady = false;
+    let calibrationSaveQueue = Promise.resolve();
+    let calibrationSaveVersion = 0;
+    const pendingCalibrationAxes = new Set();
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function randomBetween(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function randomSign() {
+      return Math.random() < 0.5 ? -1 : 1;
+    }
+
+    function createDemoSensors() {
+      const longitudinal = randomSign() * randomBetween(0.8, 1.2);
+      const transverse = randomSign() * randomBetween(1.1, 1.5);
+      const sensors = { pitch: null, roll: null };
+      sensors[VEHICLE_CONFIG.longitudinal.source] = longitudinal / VEHICLE_CONFIG.longitudinal.factor;
+      sensors[VEHICLE_CONFIG.transverse.source] = transverse / VEHICLE_CONFIG.transverse.factor;
+      return sensors;
+    }
+
+    function formatDegrees(value) {
+      return Number.isFinite(value) ? `${value.toFixed(2)}°` : '--°';
+    }
+
+    function updateDisplay() {
+      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), calibration.longitudinal);
+      const transverse = adjustedValue(mappedRawValue('transverse'), calibration.transverse);
+      pitchElement.textContent = formatDegrees(longitudinal);
+      rollElement.textContent = formatDegrees(transverse);
+
+      const x = Number.isFinite(transverse) ? clamp(transverse / MAX_TILT_DEGREES, -1, 1) * 39 : 0;
+      const y = Number.isFinite(longitudinal) ? clamp(-longitudinal / MAX_TILT_DEGREES, -1, 1) * 39 : 0;
+      bubbleElement.style.left = `${50 + x}%`;
+      bubbleElement.style.top = `${50 + y}%`;
+
+      updateZeroButton(pitchZeroButton, calibration.longitudinal, mappedRawValue('longitudinal'), 'longitudinal');
+      updateZeroButton(rollZeroButton, calibration.transverse, mappedRawValue('transverse'), 'transverse');
+      updateLiftHint(longitudinal, transverse);
+
+      if (Number.isFinite(longitudinal) && Number.isFinite(transverse)) {
+        levelElement.setAttribute('aria-label', `Längsneigung ${longitudinal.toFixed(2)} Grad, Querneigung ${transverse.toFixed(2)} Grad`);
+      }
+    }
+
+    function mappedRawValue(axis) {
+      const mapping = VEHICLE_CONFIG[axis];
+      const value = rawSensors[mapping.source];
+      return Number.isFinite(value) ? value * mapping.factor : null;
+    }
+
+    function adjustedValue(rawValue, offset) {
+      if (!Number.isFinite(rawValue)) return null;
+      return Number.isFinite(offset) ? rawValue - offset : rawValue;
+    }
+
+    function updateLiftHint(longitudinal, transverse) {
+      if (!Number.isFinite(longitudinal) || !Number.isFinite(transverse)) {
+        hideLiftMarkers();
+        return;
+      }
+
+      const longitudinalLevel = Math.abs(longitudinal) <= HINT_THRESHOLD;
+      const transverseLevel = Math.abs(transverse) <= HINT_THRESHOLD;
+      if (longitudinalLevel && transverseLevel) {
+        hideLiftMarkers();
+        return;
+      }
+
+      const points = cornerLiftMarkers(longitudinal, transverse);
+      showLiftMarkers(PREVIEW_MODE ? points : points.filter(point => point.liftMm > 0));
+    }
+
+    function cornerLiftMarkers(longitudinal, transverse) {
+      const longitudinalLift = Math.tan(Math.abs(longitudinal) * Math.PI / 180) * VEHICLE_CONFIG.wheelbaseMm;
+      const frontTransverseLift = Math.tan(Math.abs(transverse) * Math.PI / 180) * VEHICLE_CONFIG.frontTrackMm;
+      const rearTransverseLift = Math.tan(Math.abs(transverse) * Math.PI / 180) * VEHICLE_CONFIG.rearTrackMm;
+      const frontLift = longitudinal < -HINT_THRESHOLD ? longitudinalLift : 0;
+      const rearLift = longitudinal > HINT_THRESHOLD ? longitudinalLift : 0;
+      const leftLiftFactor = transverse > HINT_THRESHOLD ? 1 : 0;
+      const rightLiftFactor = transverse < -HINT_THRESHOLD ? 1 : 0;
+
+      return [
+        { x: LIFT_MARKER_LOW_X, y: LIFT_MARKER_LOW_Y, liftMm: frontLift + frontTransverseLift * leftLiftFactor },
+        { x: LIFT_MARKER_HIGH_X, y: LIFT_MARKER_LOW_Y, liftMm: frontLift + frontTransverseLift * rightLiftFactor },
+        { x: LIFT_MARKER_LOW_X, y: LIFT_MARKER_HIGH_Y, liftMm: rearLift + rearTransverseLift * leftLiftFactor },
+        { x: LIFT_MARKER_HIGH_X, y: LIFT_MARKER_HIGH_Y, liftMm: rearLift + rearTransverseLift * rightLiftFactor }
+      ];
+    }
+
+    function showLiftMarkers(points) {
+      liftMarkerElements.forEach((marker, index) => {
+        if (!points[index]) {
+          marker.hidden = true;
+          return;
+        }
+        const point = points[index];
+        marker.style.left = point.x < 50 ? '10px' : 'auto';
+        marker.style.right = point.x < 50 ? 'auto' : '10px';
+        marker.style.top = `${points[index].y}%`;
+        marker.style.transform = 'translateY(-50%)';
+        const liftCm = point.liftMm / 10;
+        marker.textContent = `${formatLiftCm(points[index].liftMm)} cm\n${liftCm === 0 ? 'ok' : 'anheben'}`;
+        marker.classList.toggle('muted', liftCm === 0);
+        marker.classList.toggle('ok', liftCm > 0 && liftCm < 5);
+        marker.classList.toggle('warning', liftCm >= 5 && liftCm < 10);
+        marker.classList.toggle('critical', liftCm >= 10);
+        marker.hidden = false;
+      });
+    }
+
+    function formatLiftCm(liftMm) {
+      return String(Math.round(liftMm / 10));
+    }
+
+    function hideLiftMarkers() {
+      liftMarkerElements.forEach(marker => { marker.hidden = true; });
+    }
+
+    function updateZeroButton(button, offset, rawValue, axis) {
+      const active = Number.isFinite(offset);
+      button.disabled = !calibrationReady || !Number.isFinite(rawValue) || pendingCalibrationAxes.has(axis);
+      button.classList.toggle('active', active);
+      button.textContent = active ? 'Nullpunkt löschen' : 'Nullpunkt setzen';
+      button.setAttribute('aria-pressed', String(active));
+    }
+
+    async function loadCalibration() {
+      const response = await fetch(CALIBRATION_URL, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Calibration request failed: ${response.status}`);
+      calibration = normalizeCalibration(await response.json());
+      calibrationReady = true;
+    }
+
+    function normalizeCalibration(value) {
+      return {
+        longitudinal: Number.isFinite(value?.longitudinal) ? value.longitudinal : null,
+        transverse: Number.isFinite(value?.transverse) ? value.transverse : null
+      };
+    }
+
+    async function saveCalibration(value) {
+      const body = new URLSearchParams({
+        longitudinal: Number.isFinite(value.longitudinal) ? String(value.longitudinal) : 'null',
+        transverse: Number.isFinite(value.transverse) ? String(value.transverse) : 'null'
+      });
+      const response = await fetch(CALIBRATION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      if (!response.ok) throw new Error(`Calibration save failed: ${response.status}`);
+      return normalizeCalibration(await response.json());
+    }
+
+    async function toggleZero(axis) {
+      const rawValue = mappedRawValue(axis);
+      if (!Number.isFinite(rawValue)) return;
+      const nextCalibration = { ...calibration };
+      nextCalibration[axis] = Number.isFinite(calibration[axis]) ? null : rawValue;
+      calibration = nextCalibration;
+      pendingCalibrationAxes.add(axis);
+      updateDisplay();
+      const saveVersion = ++calibrationSaveVersion;
+      calibrationSaveQueue = calibrationSaveQueue
+        .catch(() => {})
+        .then(() => saveCalibration(nextCalibration))
+        .then(savedCalibration => {
+          if (saveVersion === calibrationSaveVersion) calibration = savedCalibration;
+        })
+        .catch(() => {
+          setStatus('Nullpunkt nicht gespeichert', 'error', 'Die Kalibrierungsdatei auf dem Router konnte nicht aktualisiert werden.');
+        })
+        .finally(() => {
+          pendingCalibrationAxes.delete(axis);
+          updateDisplay();
+        });
+    }
+
+    function setStatus(text, state, help = '') {
+      statusElement.textContent = text;
+      statusDotElement.className = `status-dot${state ? ` ${state}` : ''}`;
+      statusHelpElement.textContent = help;
+    }
+
+    function connect() {
+      if (source) source.close();
+      window.clearTimeout(connectionTimer);
+      setStatus('Verbinde mit ESP32 Main …', '', 'Live-Daten benötigen einen maschinenlesbaren ESP32-Endpunkt.');
+
+      source = new EventSource(EVENT_URL, { withCredentials: true });
+      connectionTimer = window.setTimeout(showConnectionHelp, CONNECTION_TIMEOUT_MS);
+
+      source.addEventListener('open', () => {
+        window.clearTimeout(connectionTimer);
+        setStatus('Mit ESP32 Main verbunden', 'online');
+      });
+
+      source.addEventListener('state', event => {
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (error) {
+          return;
+        }
+
+        const value = Number(data.value);
+        if (!Number.isFinite(value)) return;
+        if (data.id === 'sensor-pitch') rawSensors.pitch = value;
+        if (data.id === 'sensor-roll') rawSensors.roll = value;
+        updateDisplay();
+      });
+
+      source.addEventListener('error', () => {
+        if (source && source.readyState === EventSource.CLOSED) showConnectionHelp();
+      });
+    }
+
+    function showConnectionHelp() {
+      window.clearTimeout(connectionTimer);
+      if (source) source.close();
+      setStatus('ESP32-Livedaten nicht verfügbar', 'error', 'Bis zum ESP32-Update bitte Demo-Modus nutzen.');
+    }
+
+    pitchZeroButton.addEventListener('click', () => toggleZero('longitudinal'));
+    rollZeroButton.addEventListener('click', () => toggleZero('transverse'));
+
+    async function initialize() {
+      if (PREVIEW_MODE) {
+        rawSensors.pitch = MOCK_SENSORS.pitch;
+        rawSensors.roll = MOCK_SENSORS.roll;
+        setStatus('Demomodus', 'online', 'Testwerte ohne Verbindung zum ESP32 Main.');
+      }
+      try {
+        await loadCalibration();
+      } catch (error) {
+        calibrationReady = true;
+        if (PREVIEW_MODE) {
+          setStatus('Demomodus', 'online', 'Testwerte ohne Verbindung zum ESP32 Main.');
+        } else {
+          setStatus('Kalibrierung nicht verfügbar', 'error', 'Der gespeicherte Nullpunkt konnte nicht vom Router geladen werden.');
+        }
+      }
+      updateDisplay();
+      if (!PREVIEW_MODE) connect();
+    }
+
+    initialize();
+  </script>
+</body>
+</html>
