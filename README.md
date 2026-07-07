@@ -10,13 +10,13 @@ This project installs a small local camper portal on a compatible Teltonika
 RUTX11 router. It shows a mobile-friendly GPS map, GPS history/export tools,
 and a local tilt/level page for an ESP32-based vehicle sensor.
 
+If your local device addresses differ, edit `web/portal-config.js` before
+running the installer. See [Local device URLs](#local-device-urls).
+
 Deploying the portal means copying this repository to the router and running
 one installer script. The same deploy command is used for first setup, later
 updates, and redeployment after router changes. See
 [Deploy on the RUTX11](#deploy-on-the-rutx11).
-
-If your local device addresses differ, edit `web/portal-config.js` before
-running the installer. See [Local device URLs](#local-device-urls).
 
 The installer is designed to keep existing GPS track data under
 `/usr/local/home/womo-data`. As with any router maintenance, keep a backup if
