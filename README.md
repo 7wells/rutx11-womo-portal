@@ -13,10 +13,9 @@ and a local tilt/level page for an ESP32-based vehicle sensor.
 If your local device addresses differ, edit `web/portal-config.js` before
 running the installer. See [Local device URLs](#local-device-urls).
 
-Deploying the portal means copying this repository to the router and running
-one installer script. The same deploy command is used for first setup, later
-updates, and redeployment after router changes. See
-[Deploy on the RUTX11](#deploy-on-the-rutx11).
+The first deployment copies this repository to the router and runs one
+installer script. After that, future updates need only the command
+`womo-portal-update`. See [Deploy on the RUTX11](#deploy-on-the-rutx11).
 
 The installer is designed to keep existing GPS track data under
 `/usr/local/home/womo-data`. As with any router maintenance, keep a backup if
@@ -56,6 +55,7 @@ router through a tunnel.
   - local device URLs for navigation buttons and ESP32 Main access
 - scripts/
   - installation script
+  - one-command portal updater
   - GPS track sync script
   - private data safety check
 
@@ -80,13 +80,26 @@ cd rutx11-womo-portal-main
 sh scripts/install_womo_landing.sh
 ```
 
+After the first successful deployment, install future versions with:
+
+```sh
+womo-portal-update
+```
+
+The update command keeps the currently installed `portal-config.js`, so local
+device URLs are not replaced by repository defaults.
+
 ### Deployment notes
 
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
   enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
-  configures uhttpd on port 8080.
-- Use the same deploy command for first setup, later updates, and redeployment
-  after router changes.
+  configures uhttpd on port 8080. It also installs the persistent
+  `womo-portal-update` command under `/usr/local/bin`.
+- Use the full deployment procedure for first setup or after a factory reset.
+  Use `womo-portal-update` for normal updates.
+- The update command preserves the installed `portal-config.js`. GPS history
+  and tilt calibration already remain outside the web root and are not
+  replaced by an update.
 - Existing GPS history in `/usr/local/home/root/womo-data/gps_track.log` is not
   overwritten by the installer and is migrated into monthly files by the sync
   script.

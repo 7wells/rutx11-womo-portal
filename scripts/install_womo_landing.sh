@@ -12,6 +12,7 @@ CGI_GROUP="uhttpd"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
+UPDATE_SCRIPT="/usr/local/bin/womo-portal-update"
 CRON_FILE="/etc/crontabs/root"
 CRON_ENTRY="0 * * * * $SYNC_SCRIPT"
 LEAFLET_VERSION="1.9.4"
@@ -22,6 +23,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_SOURCE="$REPO_ROOT/web"
 LEAFLET_SOURCE="$WEB_SOURCE/assets/leaflet"
 SYNC_SOURCE="$REPO_ROOT/scripts/sync_womo_gps_track.sh"
+UPDATE_SOURCE="$REPO_ROOT/scripts/update_womo_portal.sh"
 
 status() {
   echo "==> $*"
@@ -135,6 +137,16 @@ install_sync_script() {
   chmod 755 "$SYNC_SCRIPT"
 }
 
+# Install the updater atomically so it can safely replace a running copy.
+install_update_script() {
+  status "Installing portal update command"
+
+  update_target="$UPDATE_SCRIPT.tmp.$$"
+  cp "$UPDATE_SOURCE" "$update_target"
+  chmod 755 "$update_target"
+  mv -f "$update_target" "$UPDATE_SCRIPT"
+}
+
 migrate_legacy_data() {
   status "Migrating legacy GPS data if needed"
 
@@ -220,6 +232,7 @@ need_file "$WEB_SOURCE/cgi-bin/gps_lib.sh"
 need_file "$WEB_SOURCE/cgi-bin/gps_track.cgi"
 need_file "$WEB_SOURCE/cgi-bin/tilt_calibration.cgi"
 need_file "$SYNC_SOURCE"
+need_file "$UPDATE_SOURCE"
 
 status "Creating target directories"
 mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
@@ -228,6 +241,7 @@ install_web_files
 migrate_legacy_data
 install_leaflet
 install_sync_script
+install_update_script
 "$SYNC_SCRIPT" >/dev/null 2>&1 || true
 set_permissions
 install_cron
