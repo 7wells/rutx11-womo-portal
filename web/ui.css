@@ -1,0 +1,108 @@
+/* Shared visual foundation for all WoMo portal pages. */
+:root {
+  --womo-text: #f7f9fc;
+  --womo-muted: #aab7c8;
+  --womo-control-bg: rgb(255 255 255 / 16%);
+  --womo-control-border: rgb(255 255 255 / 22%);
+  --womo-control-text: #f3f4f6;
+  --womo-action-bg: #21324a;
+  --womo-action-border: #52647c;
+  --womo-action-text: #f7f9fc;
+  --womo-action-active-bg: #16563a;
+  --womo-action-active-border: #53d88c;
+  --womo-action-active-text: #eafff2;
+  --womo-primary: #2563eb;
+  --womo-focus: #93c5fd;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Navigation links use one compact pill shape on the map and tilt pages. */
+.womo-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--womo-control-border);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--womo-control-bg);
+  color: var(--womo-control-text);
+  font-size: .76rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.womo-nav-link:hover {
+  filter: brightness(1.1);
+}
+
+.womo-nav-link:focus-visible {
+  outline: 2px solid var(--womo-focus);
+  outline-offset: 2px;
+}
+
+.womo-nav-link.disabled,
+.womo-nav-link[aria-disabled="true"] {
+  opacity: .42;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Action buttons stay rectangular so they cannot be confused with status pills. */
+.womo-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--womo-action-border);
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: var(--womo-action-bg);
+  color: var(--womo-action-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 24%);
+  font: inherit;
+  cursor: pointer;
+}
+
+.womo-action-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.womo-action-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.womo-action-button:focus-visible {
+  outline: 2px solid var(--womo-focus);
+  outline-offset: 2px;
+}
+
+.womo-action-button.active {
+  border-color: var(--womo-action-active-border);
+  background: var(--womo-action-active-bg);
+  color: var(--womo-action-active-text);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 62%);
+}
+
+.womo-action-button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Pages that do not force the dark theme follow the device color scheme. */
+@media (prefers-color-scheme: light) {
+  :root:not(.womo-theme-dark) {
+    --womo-text: #111827;
+    --womo-muted: #374151;
+    --womo-control-bg: rgb(17 24 39 / 10%);
+    --womo-control-border: rgb(17 24 39 / 18%);
+    --womo-control-text: #1d4ed8;
+    --womo-action-bg: rgb(17 24 39 / 8%);
+    --womo-action-border: rgb(17 24 39 / 28%);
+    --womo-action-text: #111827;
+    --womo-focus: #1d4ed8;
+  }
+}

@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" class="womo-theme-dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WoMo Tilt</title>
+  <link rel="stylesheet" href="ui.css">
   <style>
     :root {
       color-scheme: dark;
@@ -13,7 +14,6 @@
       --muted: #aab7c8;
       --accent: #53d88c;
       --bubble: #d9ff55;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -48,23 +48,11 @@
       gap: 6px;
     }
 
-    .header-actions .nav-link {
+    .header-actions .womo-nav-link {
       min-height: 34px;
       padding: 6px 8px;
       font-size: .86rem;
       white-space: nowrap;
-    }
-
-    .nav-link, button {
-      min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 7px 11px;
-      background: #21324a;
-      color: inherit;
-      font: inherit;
-      text-decoration: none;
-      cursor: pointer;
     }
 
     .readings {
@@ -94,14 +82,7 @@
       font-size: clamp(1.25rem, 6.4vw, 1.7rem);
       font-variant-numeric: tabular-nums;
     }
-    .zero-button { width: 100%; min-height: 32px; margin-top: 8px; padding: 5px 7px; color: var(--muted); font-size: .82rem; }
-    .zero-button.active {
-      border-color: var(--accent);
-      background: #16563a;
-      color: #eafff2;
-      box-shadow: 0 0 0 1px rgb(0 0 0 / 62%);
-    }
-    .zero-button:disabled { cursor: not-allowed; opacity: .55; }
+    .zero-button { width: 100%; min-height: 32px; margin-top: 8px; padding: 5px 7px; font-size: .82rem; }
 
     .level-card { padding: 8px; }
 
@@ -157,11 +138,11 @@
 
     .lift-marker {
       min-width: 100px;
-      border: 1px solid #9fffc2;
+      border: 0;
       border-radius: 999px;
       padding: 5px 7px;
-      background: rgb(7 67 41 / 90%);
-      color: #baffd2;
+      background: rgb(33 50 74 / 72%);
+      color: var(--muted);
       font-size: .9rem;
       font-weight: 750;
       line-height: 1.08;
@@ -171,27 +152,23 @@
     }
 
     .lift-marker.muted {
-      border-color: rgb(83 216 140 / 40%);
-      background: rgb(7 67 41 / 38%);
-      color: rgb(186 255 210 / 62%);
+      background: rgb(33 50 74 / 48%);
+      color: rgb(170 183 200 / 62%);
     }
 
     .lift-marker.ok {
-      border-color: #9fffc2;
-      background: rgb(7 67 41 / 90%);
-      color: #baffd2;
+      background: rgb(31 70 58 / 76%);
+      color: #a9e7c2;
     }
 
     .lift-marker.warning {
-      border-color: #ffd76a;
-      background: rgb(121 82 12 / 92%);
-      color: #fff2be;
+      background: rgb(76 65 42 / 78%);
+      color: #f0d994;
     }
 
     .lift-marker.critical {
-      border-color: #ff9a8a;
-      background: rgb(116 31 26 / 92%);
-      color: #ffe0dc;
+      background: rgb(78 48 49 / 80%);
+      color: #efb0aa;
     }
 
     .status-card { margin-top: 8px; padding: 8px 11px; }
@@ -208,9 +185,9 @@
       .level-card { padding: 8px; }
       .status-card { padding-block: 7px; }
       .status-help { font-size: .7rem; line-height: 1.18; }
-      .nav-link, button { padding-inline: 8px; font-size: .85rem; }
+      .womo-action-button { padding-inline: 8px; font-size: .85rem; }
       .header-actions { gap: 5px; }
-      .header-actions .nav-link { padding-inline: 6px; font-size: .76rem; }
+      .header-actions .womo-nav-link { padding-inline: 6px; font-size: .76rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -223,8 +200,8 @@
     <header>
       <h1>WoMo Neigung</h1>
       <div class="header-actions">
-        <a id="esp32MainLink" class="nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
-        <a class="nav-link" href="index.html">Karte</a>
+        <a id="esp32MainLink" class="womo-nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
+        <a class="womo-nav-link" href="index.html">Karte</a>
       </div>
     </header>
 
@@ -232,12 +209,12 @@
       <div class="reading">
         <span class="reading-label">Längsneigung</span>
         <strong id="pitch" class="reading-value">-5.73°</strong>
-        <button id="pitchZero" class="zero-button" type="button">Nullpunkt setzen</button>
+        <button id="pitchZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
       <div class="reading">
         <span class="reading-label">Querneigung</span>
         <strong id="roll" class="reading-value">-0.87°</strong>
-        <button id="rollZero" class="zero-button" type="button">Nullpunkt setzen</button>
+        <button id="rollZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
     </section>
 
