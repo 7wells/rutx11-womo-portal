@@ -174,12 +174,14 @@
     /* Strict mobile layout target: Samsung Galaxy A56 Firefox, 324 x 608 CSS px viewport. */
     @media (max-width: 340px) {
       main { padding-inline: 8px; }
+      header { gap: 6px; }
+      h1 { font-size: 1.1rem; white-space: nowrap; }
       .level-card { padding: 8px; }
       .status-card { padding-block: 7px; }
       .status-help { font-size: .7rem; line-height: 1.18; }
       .womo-action-button { padding-inline: 8px; font-size: .85rem; }
-      .header-actions { gap: 5px; }
-      .header-actions .womo-nav-link { padding-inline: 6px; font-size: .76rem; }
+      .header-actions { gap: 4px; }
+      .header-actions .womo-nav-link { padding-inline: 5px; font-size: .7rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -231,7 +233,7 @@
         <span id="statusDot" class="womo-status-dot status-dot"></span>
         <span id="status">Verbinde mit ESP32 Main …</span>
       </div>
-      <p id="statusHelp" class="status-help">Live-Daten benötigen einen maschinenlesbaren ESP32-Endpunkt.</p>
+      <p id="statusHelp" class="status-help">Warte auf Neigungsdaten vom ESP32 Main.</p>
     </section>
   </main>
 
@@ -244,6 +246,7 @@
     const MAX_TILT_DEGREES = 10;
     const HINT_THRESHOLD = 0.3;
     const CONNECTION_TIMEOUT_MS = 8000;
+    const RECONNECT_DELAY_MS = 15000;
     const LIFT_MARKER_LOW_X = 23;
     const LIFT_MARKER_HIGH_X = 77;
     const LIFT_MARKER_LOW_Y = 10;
@@ -261,6 +264,39 @@
     };
     const VEHICLE_CONFIG = window.WOMO_TILT_CONFIG || DEFAULT_CONFIG;
     const MOCK_SENSORS = createDemoSensors();
+    // Keep all user-facing connection and calibration messages in one place.
+    const STATUS_MESSAGES = Object.freeze({
+      connecting: {
+        text: 'Verbinde mit ESP32 Main …',
+        state: 'warning',
+        help: 'Warte auf Neigungsdaten vom ESP32 Main.'
+      },
+      live: {
+        text: 'ESP32-Livedaten aktiv',
+        state: 'online',
+        help: ''
+      },
+      demo: {
+        text: 'Demomodus',
+        state: 'warning',
+        help: 'Zufällige Testwerte werden angezeigt.'
+      },
+      fallbackDemo: {
+        text: 'Demomodus – keine ESP32-Daten',
+        state: 'warning',
+        help: 'Zufällige Testwerte werden angezeigt.'
+      },
+      calibrationSaveError: {
+        text: 'Nullpunkt nicht gespeichert',
+        state: 'error',
+        help: 'Die Kalibrierungsdatei auf dem Router konnte nicht aktualisiert werden.'
+      },
+      calibrationLoadError: {
+        text: 'Kalibrierung nicht verfügbar',
+        state: 'error',
+        help: 'Der gespeicherte Nullpunkt konnte nicht vom Router geladen werden.'
+      }
+    });
 
     const pitchElement = document.getElementById('pitch');
     const rollElement = document.getElementById('roll');
@@ -281,6 +317,9 @@
 
     let source = null;
     let connectionTimer = null;
+    let reconnectTimer = null;
+    let fallbackDemoActive = false;
+    let pendingLiveSensors = { pitch: null, roll: null };
     const rawSensors = PREVIEW_MODE ? { ...MOCK_SENSORS } : { pitch: null, roll: null };
     let calibration = { longitudinal: null, transverse: null };
     let calibrationReady = false;
@@ -320,8 +359,10 @@
     }
 
     function updateDisplay() {
-      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), calibration.longitudinal);
-      const transverse = adjustedValue(mappedRawValue('transverse'), calibration.transverse);
+      const longitudinalOffset = fallbackDemoActive ? null : calibration.longitudinal;
+      const transverseOffset = fallbackDemoActive ? null : calibration.transverse;
+      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), longitudinalOffset);
+      const transverse = adjustedValue(mappedRawValue('transverse'), transverseOffset);
       pitchElement.textContent = formatDegrees(longitudinal);
       rollElement.textContent = formatDegrees(transverse);
 
@@ -364,7 +405,7 @@
       }
 
       const points = cornerLiftMarkers(longitudinal, transverse);
-      showLiftMarkers(PREVIEW_MODE ? points : points.filter(point => point.liftMm > 0));
+      showLiftMarkers(PREVIEW_MODE || fallbackDemoActive ? points : points.filter(point => point.liftMm > 0));
     }
 
     function cornerLiftMarkers(longitudinal, transverse) {
@@ -415,7 +456,7 @@
 
     function updateZeroButton(button, offset, rawValue, axis) {
       const active = Number.isFinite(offset);
-      button.disabled = !calibrationReady || !Number.isFinite(rawValue) || pendingCalibrationAxes.has(axis);
+      button.disabled = fallbackDemoActive || !calibrationReady || !Number.isFinite(rawValue) || pendingCalibrationAxes.has(axis);
       button.classList.toggle('active', active);
       button.textContent = active ? 'Nullpunkt löschen' : 'Nullpunkt setzen';
       button.setAttribute('aria-pressed', String(active));
@@ -465,7 +506,7 @@
           if (saveVersion === calibrationSaveVersion) calibration = savedCalibration;
         })
         .catch(() => {
-          setStatus('Nullpunkt nicht gespeichert', 'error', 'Die Kalibrierungsdatei auf dem Router konnte nicht aktualisiert werden.');
+          showStatus('calibrationSaveError');
         })
         .finally(() => {
           pendingCalibrationAxes.delete(axis);
@@ -479,20 +520,58 @@
       statusHelpElement.textContent = help;
     }
 
-    function connect() {
-      if (source) source.close();
+    // Display one centrally defined status message.
+    function showStatus(name) {
+      const message = STATUS_MESSAGES[name];
+      setStatus(message.text, message.state, message.help);
+    }
+
+    // Close the current stream and cancel its connection timeout.
+    function closeConnection() {
       window.clearTimeout(connectionTimer);
-      setStatus('Verbinde mit ESP32 Main …', '', 'Live-Daten benötigen einen maschinenlesbaren ESP32-Endpunkt.');
+      connectionTimer = null;
+      if (source) source.close();
+      source = null;
+    }
 
-      source = new EventSource(EVENT_URL, { withCredentials: true });
-      connectionTimer = window.setTimeout(showConnectionHelp, CONNECTION_TIMEOUT_MS);
+    // Retry in the background while the clearly labelled demo stays visible.
+    function scheduleReconnect() {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = window.setTimeout(connect, RECONNECT_DELAY_MS);
+    }
 
-      source.addEventListener('open', () => {
-        window.clearTimeout(connectionTimer);
-        setStatus('Mit ESP32 Main verbunden', 'online');
-      });
+    // Replace unavailable live values with new demo values and never retain stale data.
+    function activateFallbackDemo(eventSource) {
+      if (eventSource && source !== eventSource) return;
+      closeConnection();
 
-      source.addEventListener('state', event => {
+      if (!fallbackDemoActive) {
+        const demoSensors = createDemoSensors();
+        rawSensors.pitch = demoSensors.pitch;
+        rawSensors.roll = demoSensors.roll;
+      }
+
+      fallbackDemoActive = true;
+      pendingLiveSensors = { pitch: null, roll: null };
+      showStatus('fallbackDemo');
+      updateDisplay();
+      scheduleReconnect();
+    }
+
+    // Start a fresh ESP32 stream without mixing partial live values with demo data.
+    function connect() {
+      closeConnection();
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+      pendingLiveSensors = { pitch: null, roll: null };
+      if (!fallbackDemoActive) showStatus('connecting');
+
+      const eventSource = new EventSource(EVENT_URL, { withCredentials: true });
+      source = eventSource;
+      connectionTimer = window.setTimeout(() => activateFallbackDemo(eventSource), CONNECTION_TIMEOUT_MS);
+
+      eventSource.addEventListener('state', event => {
+        if (source !== eventSource) return;
         let data;
         try {
           data = JSON.parse(event.data);
@@ -502,20 +581,22 @@
 
         const value = Number(data.value);
         if (!Number.isFinite(value)) return;
-        if (data.id === 'sensor-pitch') rawSensors.pitch = value;
-        if (data.id === 'sensor-roll') rawSensors.roll = value;
+        if (data.id === 'sensor-pitch') pendingLiveSensors.pitch = value;
+        if (data.id === 'sensor-roll') pendingLiveSensors.roll = value;
+        if (!Number.isFinite(pendingLiveSensors.pitch) || !Number.isFinite(pendingLiveSensors.roll)) return;
+
+        window.clearTimeout(connectionTimer);
+        connectionTimer = null;
+        rawSensors.pitch = pendingLiveSensors.pitch;
+        rawSensors.roll = pendingLiveSensors.roll;
+        fallbackDemoActive = false;
+        showStatus('live');
         updateDisplay();
       });
 
-      source.addEventListener('error', () => {
-        if (source && source.readyState === EventSource.CLOSED) showConnectionHelp();
+      eventSource.addEventListener('error', () => {
+        activateFallbackDemo(eventSource);
       });
-    }
-
-    function showConnectionHelp() {
-      window.clearTimeout(connectionTimer);
-      if (source) source.close();
-      setStatus('ESP32-Livedaten nicht verfügbar', 'error', 'Bis zum ESP32-Update bitte Demo-Modus nutzen.');
     }
 
     pitchZeroButton.addEventListener('click', () => toggleZero('longitudinal'));
@@ -525,21 +606,26 @@
       if (PREVIEW_MODE) {
         rawSensors.pitch = MOCK_SENSORS.pitch;
         rawSensors.roll = MOCK_SENSORS.roll;
-        setStatus('Demomodus', 'online', 'Testwerte ohne Verbindung zum ESP32 Main.');
+        showStatus('demo');
       }
       try {
         await loadCalibration();
       } catch (error) {
         calibrationReady = true;
         if (PREVIEW_MODE) {
-          setStatus('Demomodus', 'online', 'Testwerte ohne Verbindung zum ESP32 Main.');
+          showStatus('demo');
         } else {
-          setStatus('Kalibrierung nicht verfügbar', 'error', 'Der gespeicherte Nullpunkt konnte nicht vom Router geladen werden.');
+          showStatus('calibrationLoadError');
         }
       }
       updateDisplay();
       if (!PREVIEW_MODE) connect();
     }
+
+    window.addEventListener('pagehide', () => {
+      closeConnection();
+      window.clearTimeout(reconnectTimer);
+    });
 
     initialize();
   </script>

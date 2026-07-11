@@ -120,6 +120,10 @@
   background: var(--womo-status-online);
 }
 
+.womo-status-dot.warning {
+  background: var(--womo-status-warning);
+}
+
 .womo-status-dot.error {
   background: var(--womo-status-error);
 }
