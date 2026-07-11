@@ -14,6 +14,8 @@
       --muted: #aab7c8;
       --accent: #53d88c;
       --bubble: #d9ff55;
+      --womo-panel-bg: color-mix(in srgb, var(--panel) 92%, transparent);
+      --womo-panel-shadow: 0 10px 30px rgb(0 0 0 / 18%);
     }
 
     * { box-sizing: border-box; }
@@ -60,13 +62,6 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
       margin-bottom: 12px;
-    }
-
-    .reading, .level-card, .status-card {
-      border: 1px solid #33445a;
-      border-radius: 14px;
-      background: color-mix(in srgb, var(--panel) 92%, transparent);
-      box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
     }
 
     .reading { padding: 12px; text-align: center; }
@@ -173,9 +168,6 @@
 
     .status-card { margin-top: 8px; padding: 8px 11px; }
     .status-line { display: flex; align-items: center; gap: 8px; font-size: .84rem; }
-    .status-dot { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #e4a23a; }
-    .status-dot.online { background: var(--accent); }
-    .status-dot.error { background: #ff6b6b; }
     .status-help { margin: 5px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.25; }
     [hidden] { display: none !important; }
 
@@ -206,19 +198,19 @@
     </header>
 
     <section class="readings" aria-label="Neigungswerte">
-      <div class="reading">
+      <div class="reading womo-panel">
         <span class="reading-label">Längsneigung</span>
         <strong id="pitch" class="reading-value">-5.73°</strong>
         <button id="pitchZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
-      <div class="reading">
+      <div class="reading womo-panel">
         <span class="reading-label">Querneigung</span>
         <strong id="roll" class="reading-value">-0.87°</strong>
         <button id="rollZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
     </section>
 
-    <section class="level-card" aria-label="Libelle">
+    <section class="level-card womo-panel" aria-label="Libelle">
       <div id="level" class="level" role="img" aria-label="Keine Neigungswerte verfügbar">
         <div class="level-dial">
           <span class="axis-label front">V</span>
@@ -234,9 +226,9 @@
       </div>
     </section>
 
-    <section class="status-card" aria-live="polite">
+    <section class="status-card womo-panel" aria-live="polite">
       <div class="status-line">
-        <span id="statusDot" class="status-dot"></span>
+        <span id="statusDot" class="womo-status-dot status-dot"></span>
         <span id="status">Verbinde mit ESP32 Main …</span>
       </div>
       <p id="statusHelp" class="status-help">Live-Daten benötigen einen maschinenlesbaren ESP32-Endpunkt.</p>
@@ -483,7 +475,7 @@
 
     function setStatus(text, state, help = '') {
       statusElement.textContent = text;
-      statusDotElement.className = `status-dot${state ? ` ${state}` : ''}`;
+      statusDotElement.className = `womo-status-dot status-dot${state ? ` ${state}` : ''}`;
       statusHelpElement.textContent = help;
     }
 

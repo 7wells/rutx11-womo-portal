@@ -11,8 +11,15 @@
   --womo-action-active-bg: #16563a;
   --womo-action-active-border: #53d88c;
   --womo-action-active-text: #eafff2;
+  --womo-panel-bg: rgb(11 19 43 / 92%);
+  --womo-panel-border: #33445a;
+  --womo-panel-radius: 14px;
+  --womo-panel-shadow: 0 4px 12px rgb(0 0 0 / 30%);
   --womo-primary: #2563eb;
   --womo-focus: #93c5fd;
+  --womo-status-online: #53d88c;
+  --womo-status-warning: #e4a23a;
+  --womo-status-error: #ff6b6b;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -92,6 +99,31 @@
   cursor: not-allowed;
 }
 
+/* Panels share their outline and depth while each page keeps its own layout. */
+.womo-panel {
+  border: 1px solid var(--womo-panel-border);
+  border-radius: var(--womo-panel-radius);
+  background: var(--womo-panel-bg);
+  box-shadow: var(--womo-panel-shadow);
+}
+
+/* Status dots use the same state colors throughout the portal. */
+.womo-status-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--womo-status-warning);
+}
+
+.womo-status-dot.online {
+  background: var(--womo-status-online);
+}
+
+.womo-status-dot.error {
+  background: var(--womo-status-error);
+}
+
 /* Pages that do not force the dark theme follow the device color scheme. */
 @media (prefers-color-scheme: light) {
   :root:not(.womo-theme-dark) {
@@ -103,6 +135,8 @@
     --womo-action-bg: rgb(17 24 39 / 8%);
     --womo-action-border: rgb(17 24 39 / 28%);
     --womo-action-text: #111827;
+    --womo-panel-bg: rgb(255 255 255 / 92%);
+    --womo-panel-border: rgb(17 24 39 / 16%);
     --womo-focus: #1d4ed8;
   }
 }
