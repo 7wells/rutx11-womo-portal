@@ -6,9 +6,76 @@ DATA_DIR="${WOMO_DATA_DIR:-/usr/local/home/womo-data}"
 GPS_DIR="${WOMO_GPS_DIR:-$DATA_DIR/gps}"
 LEGACY_TRACK="${WOMO_LEGACY_TRACK:-$DATA_DIR/gps_track.log}"
 MAX_RANGE_DAYS=365
+GPS_LOCK_DIR="${WOMO_GPS_LOCK_DIR:-$TMP_DIR/gps_track.lock}"
+GPS_LOCK_HELD=0
 
-is_number() {
-  awk -v value="$1" 'BEGIN { exit(value ~ /^-?[0-9]+(\.[0-9]+)?$/ ? 0 : 1) }'
+# Reject malformed or out-of-range latitude values before recording them.
+is_valid_latitude() {
+  awk -v value="$1" 'BEGIN {
+    valid = value ~ /^-?[0-9]+(\.[0-9]+)?$/ && value >= -90 && value <= 90
+    exit(valid ? 0 : 1)
+  }'
+}
+
+# Reject malformed or out-of-range longitude values before recording them.
+is_valid_longitude() {
+  awk -v value="$1" 'BEGIN {
+    valid = value ~ /^-?[0-9]+(\.[0-9]+)?$/ && value >= -180 && value <= 180
+    exit(valid ? 0 : 1)
+  }'
+}
+
+# Estimate the distance between two nearby GPS points in metres.
+gps_distance_metres() {
+  awk -v lat1="$1" -v lon1="$2" -v lat2="$3" -v lon2="$4" 'BEGIN {
+    dlat = (lat1 - lat2) * 111320
+    dlon = (lon1 - lon2) * 111320 * cos(lat1 / 57.29578)
+    print sqrt(dlat * dlat + dlon * dlon)
+  }'
+}
+
+# Serialize short updates to runtime track files without requiring flock.
+acquire_gps_lock() {
+  missing_owner_waits=0
+  mkdir -p "$TMP_DIR"
+
+  while ! mkdir "$GPS_LOCK_DIR" 2>/dev/null; do
+    lock_owner="$(cat "$GPS_LOCK_DIR/pid" 2>/dev/null || true)"
+
+    case "$lock_owner" in
+      ''|*[!0-9]*)
+        missing_owner_waits=$((missing_owner_waits + 1))
+        if [ "$missing_owner_waits" -ge 3 ]; then
+          rm -rf "$GPS_LOCK_DIR"
+          missing_owner_waits=0
+          continue
+        fi
+        ;;
+      *)
+        missing_owner_waits=0
+        if ! kill -0 "$lock_owner" 2>/dev/null; then
+          rm -rf "$GPS_LOCK_DIR"
+          continue
+        fi
+        ;;
+    esac
+
+    sleep 1
+  done
+
+  printf '%s\n' "$$" > "$GPS_LOCK_DIR/pid"
+  GPS_LOCK_HELD=1
+}
+
+# Release only a runtime lock owned by the current process.
+release_gps_lock() {
+  [ "$GPS_LOCK_HELD" -eq 1 ] || return 0
+
+  lock_owner="$(cat "$GPS_LOCK_DIR/pid" 2>/dev/null || true)"
+  if [ "$lock_owner" = "$$" ]; then
+    rm -rf "$GPS_LOCK_DIR"
+  fi
+  GPS_LOCK_HELD=0
 }
 
 date_to_epoch() {
@@ -387,7 +454,7 @@ emit_gps_points() {
         }
       }
     ' |
-    sort -t',' -k1,1n -u
+    sort -t',' -k1,1n -k2,2n -k3,3n -u
 }
 
 validate_date_range() {
@@ -420,10 +487,4 @@ validate_date_range() {
   fi
 
   return 0
-}
-
-ensure_gps_dirs() {
-  mkdir -p "$TMP_DIR"
-  mkdir -p "$DATA_DIR"
-  mkdir -p "$GPS_DIR"
 }

@@ -41,8 +41,7 @@ case "$FORMAT" in
     ;;
 esac
 
-ensure_gps_dirs
-
+# Export only previously recorded points; browser requests never create data.
 emit_points() {
   emit_gps_points "$FROM_TS" "$TO_TS"
 }

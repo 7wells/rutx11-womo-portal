@@ -12,9 +12,11 @@ CGI_GROUP="uhttpd"
 LEAFLET_DIR="$WEB_ROOT/assets/leaflet"
 LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
+LOGGER_SCRIPT="/usr/local/bin/womo_gps_logger.sh"
+LOGGER_INIT="/etc/init.d/womo-gps-logger"
 UPDATE_SCRIPT="/usr/local/bin/womo-portal-update"
 CRON_FILE="/etc/crontabs/root"
-CRON_ENTRY="0 * * * * $SYNC_SCRIPT"
+CRON_ENTRY="*/5 * * * * $SYNC_SCRIPT"
 LEAFLET_VERSION="1.9.4"
 LEAFLET_BASE_URL="https://unpkg.com/leaflet@$LEAFLET_VERSION/dist"
 
@@ -23,6 +25,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_SOURCE="$REPO_ROOT/web"
 LEAFLET_SOURCE="$WEB_SOURCE/assets/leaflet"
 SYNC_SOURCE="$REPO_ROOT/scripts/sync_womo_gps_track.sh"
+LOGGER_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.sh"
+LOGGER_INIT_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.init"
 UPDATE_SOURCE="$REPO_ROOT/scripts/update_womo_portal.sh"
 
 status() {
@@ -137,6 +141,34 @@ install_sync_script() {
   chmod 755 "$SYNC_SCRIPT"
 }
 
+# Stop the old logger before replacing files or importing its pending points.
+stop_gps_logger() {
+  [ ! -x "$LOGGER_INIT" ] || "$LOGGER_INIT" stop >/dev/null 2>&1 || true
+}
+
+# Install the foreground logger and its procd service definition atomically.
+install_gps_logger() {
+  status "Installing background GPS logger"
+
+  logger_target="$LOGGER_SCRIPT.tmp.$$"
+  init_target="$LOGGER_INIT.tmp.$$"
+
+  cp "$LOGGER_SOURCE" "$logger_target"
+  chmod 755 "$logger_target"
+  mv -f "$logger_target" "$LOGGER_SCRIPT"
+
+  cp "$LOGGER_INIT_SOURCE" "$init_target"
+  chmod 755 "$init_target"
+  mv -f "$init_target" "$LOGGER_INIT"
+}
+
+# Enable background recording at boot and start it immediately.
+start_gps_logger() {
+  status "Enabling background GPS logger"
+  "$LOGGER_INIT" enable
+  "$LOGGER_INIT" restart
+}
+
 # Install the updater atomically so it can safely replace a running copy.
 install_update_script() {
   status "Installing portal update command"
@@ -178,6 +210,7 @@ set_permissions() {
   chmod 755 "$CGI_DIR/tilt_calibration.cgi"
   chmod 644 "$CGI_DIR/gps_lib.sh"
   chmod 755 "$SYNC_SCRIPT"
+  chmod 755 "$LOGGER_SCRIPT" "$LOGGER_INIT"
   chmod 755 "$PERSISTENT_DATA_DIR"
   chmod 755 "$GPS_DATA_DIR"
   find "$GPS_DATA_DIR" -type f -name '*.csv' -exec chmod 644 {} \; 2>/dev/null || true
@@ -193,14 +226,15 @@ set_permissions() {
 }
 
 install_cron() {
-  status "Ensuring hourly GPS sync cron job"
+  status "Ensuring five-minute GPS persistence cron job"
 
   mkdir -p "$(dirname "$CRON_FILE")"
   touch "$CRON_FILE"
 
-  if ! grep -Fqx "$CRON_ENTRY" "$CRON_FILE"; then
-    printf '%s\n' "$CRON_ENTRY" >> "$CRON_FILE"
-  fi
+  cron_tmp="$CRON_FILE.tmp.$$"
+  grep -Fv "$SYNC_SCRIPT" "$CRON_FILE" > "$cron_tmp" || true
+  printf '%s\n' "$CRON_ENTRY" >> "$cron_tmp"
+  mv -f "$cron_tmp" "$CRON_FILE"
 
   /etc/init.d/cron reload >/dev/null 2>&1 || /etc/init.d/cron restart >/dev/null 2>&1 || true
 }
@@ -232,19 +266,24 @@ need_file "$WEB_SOURCE/cgi-bin/gps_lib.sh"
 need_file "$WEB_SOURCE/cgi-bin/gps_track.cgi"
 need_file "$WEB_SOURCE/cgi-bin/tilt_calibration.cgi"
 need_file "$SYNC_SOURCE"
+need_file "$LOGGER_SOURCE"
+need_file "$LOGGER_INIT_SOURCE"
 need_file "$UPDATE_SOURCE"
 
 status "Creating target directories"
 mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
 
+stop_gps_logger
 install_web_files
 migrate_legacy_data
 install_leaflet
 install_sync_script
+install_gps_logger
 install_update_script
-"$SYNC_SCRIPT" >/dev/null 2>&1 || true
+"$SYNC_SCRIPT" --import-existing >/dev/null
 set_permissions
 install_cron
+start_gps_logger
 configure_uhttpd
 
 status "WoMo portal installation completed."

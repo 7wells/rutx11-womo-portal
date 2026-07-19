@@ -35,6 +35,7 @@ router through a tunnel.
 
 - Mobile-friendly map landing page
 - OpenStreetMap live GPS map
+- Browser-independent background GPS recording
 - GPS tracking UI (Live / 24h / 4w)
 - Date range selection and CSV/GPX export
 - Local tilt/level page with demo fallback
@@ -56,6 +57,7 @@ router through a tunnel.
 - scripts/
   - installation script
   - one-command portal updater
+  - procd-managed background GPS logger
   - GPS track sync script
   - private data safety check
 
@@ -93,8 +95,8 @@ device URLs are not replaced by repository defaults.
 
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
   enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
-  configures uhttpd on port 8080. It also installs the persistent
-  `womo-portal-update` command under `/usr/local/bin`.
+  configures uhttpd on port 8080. It also enables the background GPS logger and
+  installs the persistent `womo-portal-update` command under `/usr/local/bin`.
 - Use the full deployment procedure for first setup or after a factory reset.
   Use `womo-portal-update` for normal updates.
 - The update command preserves the installed `portal-config.js`. GPS history
@@ -109,10 +111,23 @@ device URLs are not replaced by repository defaults.
 
 ### Runtime data
 
+- background GPS recording:
+  the procd service checks the router position every 5 seconds and records a
+  new point after at least 20 metres of movement. Recording does not depend on
+  the portal or a browser being open.
+
 - live GPS track:
   /tmp/womo/gps_track_live.log
 
-- persistent GPS track:
+- pending GPS persistence batch:
+  /tmp/womo/gps_track_pending.log
+
+- flash-safe persistence:
+  pending points are appended to monthly files every 5 minutes. An abrupt
+  power loss can therefore lose only the latest unpersisted batch, normally no
+  more than about 5 minutes.
+
+- legacy GPS track migration source:
   /usr/local/home/womo-data/gps_track.log
 
 - persistent tilt calibration:
@@ -140,9 +155,15 @@ device URLs are not replaced by repository defaults.
 - persistent data:
   /usr/local/home/womo-data
 
-- persistent data owner:
-  uhttpd, so CGI scripts can append new GPS points while the cron sync can still
-  maintain retention as root.
+- persistent data permissions:
+  calibration remains writable by uhttpd; GPS recording and persistence run as
+  root, while the map and export CGI scripts only read recorded points.
+
+- GPS logger service:
+  /etc/init.d/womo-gps-logger
+
+- GPS logger executable:
+  /usr/local/bin/womo_gps_logger.sh
 
 - legacy persistent data source:
   /usr/local/home/root/womo-data
