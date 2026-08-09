@@ -411,6 +411,9 @@
     const MAX_ZOOM = 19;
     const MAX_RANGE_DAYS = 365;
     const MAP_EDGE_PADDING = 16;
+    const MAX_VISIBLE_HISTORY_MARKERS = 300;
+    const LIVE_HISTORY_REFRESH_MS = 5000;
+    const ARCHIVE_HISTORY_REFRESH_MS = 60000;
 
     let currentRange = '1h';
     let customFrom = '';
@@ -418,8 +421,10 @@
     let resizeTimer = null;
     let autoFollow = true;
     let programmaticMove = false;
+    let lastHistoryRefresh = 0;
+    let historyMarkerRenderTimer = null;
 
-    const map = L.map('map', { zoomControl: false }).setView([51.0, 10.0], DEFAULT_ZOOM);
+    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([51.0, 10.0], DEFAULT_ZOOM);
 
     const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.DomUtil.create('a', 'map-action locate-button', zoomControl._container);
@@ -449,6 +454,7 @@
     let historyMarkers = [];
     let historyRequestId = 0;
     let activeHistoryLatLngs = [];
+    let activeHistoryPoints = [];
     let firstFix = true;
     let lastLat = null;
     let lastLon = null;
@@ -584,6 +590,8 @@
     });
 
     map.on('moveend zoomend', function() {
+      scheduleHistoryMarkerRender();
+
       if (programmaticMove) {
         programmaticMove = false;
         return;
@@ -604,6 +612,25 @@
       if (dateParts.length !== 3) return value;
 
       return dateParts[2] + '.' + dateParts[1] + '.' + dateParts[0] + ', ' + parts[1];
+    }
+
+    // Format stored Unix timestamps consistently for desktop and mobile browsers.
+    function formatHistoryTimestamp(timestamp) {
+      if (timestamp === null || timestamp === undefined || timestamp === '') return 'Zeitpunkt unbekannt';
+
+      const value = Number(timestamp);
+      if (!isFinite(value)) return 'Zeitpunkt unbekannt';
+
+      return new Date(value * 1000).toLocaleString('de-DE', {
+        timeZone: 'Europe/Berlin',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
     }
 
     function dateToUtc(value) {
@@ -766,30 +793,117 @@
         historyLine = null;
       }
 
+      clearHistoryMarkers();
+      activeHistoryPoints = [];
+      activeHistoryLatLngs = [];
+      updateFitButtonState();
+    }
+
+    // Remove only point markers while preserving the complete track line.
+    function clearHistoryMarkers() {
       historyMarkers.forEach(function(item) {
         map.removeLayer(item);
       });
 
       historyMarkers = [];
-      activeHistoryLatLngs = [];
-      updateFitButtonState();
     }
 
+    // Preserve coordinates and timestamps so displayed points can explain when they were recorded.
     function normalizeHistory(history) {
       if (!Array.isArray(history)) return [];
 
       return history.map(function(point) {
         const lat = Number(point.lat);
         const lon = Number(point.lon);
+        const timestamp = Number(point.ts);
 
         if (!isFinite(lat) || !isFinite(lon)) {
           return null;
         }
 
-        return [lat, lon];
+        return {
+          latlng: [lat, lon],
+          timestamp: isFinite(timestamp) ? timestamp : null
+        };
       }).filter(function(point) {
         return point !== null;
       });
+    }
+
+    // Use wider screen-space gaps in overview zooms and reveal more detail when zooming in.
+    function historyMarkerSpacing(zoom) {
+      if (zoom <= 4) return 0;
+      if (zoom <= 7) return 32;
+      if (zoom <= 10) return 24;
+      if (zoom <= 13) return 18;
+      if (zoom <= 16) return 12;
+      return 8;
+    }
+
+    // Select at most one stored point per screen grid cell in the visible map area.
+    function visibleHistoryMarkerPoints() {
+      const spacing = historyMarkerSpacing(map.getZoom());
+      if (spacing === 0 || activeHistoryPoints.length < 1) return [];
+
+      const size = map.getSize();
+      const padding = visibleMapPadding();
+      const minX = padding.paddingTopLeft[0];
+      const minY = padding.paddingTopLeft[1];
+      const maxX = size.x - padding.paddingBottomRight[0];
+      const maxY = size.y - padding.paddingBottomRight[1];
+      const occupiedCells = new Set();
+      const selected = [];
+
+      for (let index = 0; index < activeHistoryPoints.length; index += 1) {
+        const point = activeHistoryPoints[index];
+        const screenPoint = map.latLngToContainerPoint(point.latlng);
+
+        if (screenPoint.x < minX || screenPoint.x > maxX || screenPoint.y < minY || screenPoint.y > maxY) {
+          continue;
+        }
+
+        const cellX = Math.floor((screenPoint.x - minX) / spacing);
+        const cellY = Math.floor((screenPoint.y - minY) / spacing);
+        const cellKey = cellX + ':' + cellY;
+        if (occupiedCells.has(cellKey)) continue;
+
+        occupiedCells.add(cellKey);
+        selected.push(point);
+        if (selected.length >= MAX_VISIBLE_HISTORY_MARKERS) break;
+      }
+
+      return selected;
+    }
+
+    // Rebuild lightweight interactive markers without touching the full track line.
+    function renderHistoryMarkers() {
+      clearHistoryMarkers();
+
+      visibleHistoryMarkerPoints().forEach(function(point) {
+        const circle = L.circleMarker(point.latlng, {
+          radius: 3,
+          color: '#1d4ed8',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.8,
+          weight: 1
+        }).addTo(map);
+
+        circle.bindTooltip(formatHistoryTimestamp(point.timestamp), {
+          direction: 'top',
+          opacity: 0.95
+        });
+        circle.on('click', function() {
+          circle.openTooltip();
+        });
+        circle.bringToFront();
+        historyMarkers.push(circle);
+      });
+    }
+
+    // Coalesce Leaflet's paired move and zoom events into one marker rebuild.
+    function scheduleHistoryMarkerRender() {
+      clearTimeout(historyMarkerRenderTimer);
+      historyMarkerRenderTimer = setTimeout(renderHistoryMarkers, 40);
     }
 
     async function updateHistory(options) {
@@ -797,6 +911,7 @@
       const requestId = historyRequestId + 1;
       const url = historyUrl();
       historyRequestId = requestId;
+      lastHistoryRefresh = Date.now();
 
       try {
         const response = await fetch(url);
@@ -810,20 +925,22 @@
 
         clearHistoryLayers();
 
-        const latlngs = normalizeHistory(history);
-        if (latlngs.length < 1) {
+        const points = normalizeHistory(history);
+        if (points.length < 1) {
           lastHistoryLatLng = null;
           if (!hasCurrentGpsFix) hidePositionMarkers();
           updateMapDataOverlay();
-          setHistoryControlsEnabled(false);
           return;
         }
 
+        const latlngs = points.map(function(point) {
+          return point.latlng;
+        });
+        activeHistoryPoints = points;
         activeHistoryLatLngs = latlngs;
         lastHistoryLatLng = latlngs[latlngs.length - 1];
         updateFitButtonState();
         updateMapDataOverlay();
-        setHistoryControlsEnabled(true);
 
         if (latlngs.length >= 2) {
           historyLine = L.polyline(latlngs, {
@@ -835,18 +952,7 @@
           historyLine.bringToFront();
         }
 
-        latlngs.forEach(function(point) {
-          const circle = L.circleMarker(point, {
-            radius: 6,
-            color: '#1d4ed8',
-            fillColor: '#60a5fa',
-            fillOpacity: 0.8,
-            weight: 2
-          }).addTo(map);
-
-          circle.bringToFront();
-          historyMarkers.push(circle);
-        });
+        renderHistoryMarkers();
 
         if (!hasCurrentGpsFix && lastHistoryLatLng) {
           showLastKnownPosition(lastHistoryLatLng);
@@ -860,6 +966,7 @@
         }
 
       } catch (err) {
+        lastHistoryRefresh = 0;
         console.warn('GPS history update failed', err);
       }
     }
@@ -871,6 +978,7 @@
 
         const lat = parseFloat(data.latitude);
         const lon = parseFloat(data.longitude);
+        setHistoryControlsEnabled(data.historyAvailable === true);
 
         if (isNaN(lat) || isNaN(lon)) {
           document.getElementById('coords').textContent = lastHistoryLatLng ? 'GPS Fehler · letzte Position' : 'Keine gültigen GPS-Daten';
@@ -946,7 +1054,12 @@
 
     setInterval(updateGPS, 5000);
     setInterval(function() {
-      updateHistory({ fit: false });
+      if (customFrom && customTo) return;
+
+      const refreshInterval = currentRange === '1h' ? LIVE_HISTORY_REFRESH_MS : ARCHIVE_HISTORY_REFRESH_MS;
+      if (Date.now() - lastHistoryRefresh >= refreshInterval) {
+        updateHistory({ fit: false });
+      }
     }, 5000);
   </script>
 </body>

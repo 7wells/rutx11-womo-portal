@@ -85,4 +85,14 @@ printf '%s,%s,%s\n' "$(date +%s)" "52.000900" "13.000000" > "$LEGACY_TRACK"
 [ "$(count_points "$month_file")" -eq 4 ] || fail "upgrade import did not preserve a legacy point"
 [ ! -s "$LEGACY_TRACK" ] || fail "upgrade import did not clear the migrated legacy source"
 
+sh "$REPO_ROOT/web/cgi-bin/gps.json" > "$TEST_ROOT/gps-response"
+grep -Fq '"historyAvailable":true' "$TEST_ROOT/gps-response" || fail "GPS status did not report stored history"
+
+mkdir -p "$TEST_ROOT/empty-gps"
+WOMO_GPS_DIR="$TEST_ROOT/empty-gps" \
+WOMO_LIVE_TRACK="$TEST_ROOT/empty-live.log" \
+WOMO_LEGACY_TRACK="$TEST_ROOT/empty-legacy.log" \
+  sh "$REPO_ROOT/web/cgi-bin/gps.json" > "$TEST_ROOT/empty-gps-response"
+grep -Fq '"historyAvailable":false' "$TEST_ROOT/empty-gps-response" || fail "GPS status reported nonexistent history"
+
 echo "OK: background GPS recording, persistence, read-only CGI, and export verified."

@@ -1,9 +1,27 @@
 #!/bin/sh
 
-LAT="$(gpsctl -i 2>/dev/null || true)"
-LON="$(gpsctl -x 2>/dev/null || true)"
-STATUS="$(gpsctl -s 2>/dev/null || true)"
-TIME="$(gpsctl -e 2>/dev/null || true)"
+GPSCTL="${WOMO_GPSCTL:-gpsctl}"
+LIVE_TRACK="${WOMO_LIVE_TRACK:-/tmp/womo/gps_track_live.log}"
+DATA_DIR="${WOMO_DATA_DIR:-/usr/local/home/womo-data}"
+GPS_DIR="${WOMO_GPS_DIR:-$DATA_DIR/gps}"
+LEGACY_TRACK="${WOMO_LEGACY_TRACK:-$DATA_DIR/gps_track.log}"
+
+LAT="$("$GPSCTL" -i 2>/dev/null || true)"
+LON="$("$GPSCTL" -x 2>/dev/null || true)"
+STATUS="$("$GPSCTL" -s 2>/dev/null || true)"
+TIME="$("$GPSCTL" -e 2>/dev/null || true)"
+
+# Report whether any recorded track exists, independently of the selected UI range.
+has_track_history() {
+  [ -s "$LIVE_TRACK" ] && return 0
+  [ -s "$LEGACY_TRACK" ] && return 0
+
+  for track_file in "$GPS_DIR"/*.csv; do
+    [ -s "$track_file" ] && return 0
+  done
+
+  return 1
+}
 
 json_string() {
   printf '%s' "$1" \
@@ -15,6 +33,9 @@ LAT_JSON="$(json_string "$LAT")"
 LON_JSON="$(json_string "$LON")"
 STATUS_JSON="$(json_string "$STATUS")"
 TIME_JSON="$(json_string "$TIME")"
+HISTORY_AVAILABLE=false
+has_track_history && HISTORY_AVAILABLE=true
 
 printf 'Content-Type: application/json\r\n\r\n'
-printf '{"latitude":"%s","longitude":"%s","status":"%s","datetime":"%s"}\n' "$LAT_JSON" "$LON_JSON" "$STATUS_JSON" "$TIME_JSON"
+printf '{"latitude":"%s","longitude":"%s","status":"%s","datetime":"%s","historyAvailable":%s}\n' \
+  "$LAT_JSON" "$LON_JSON" "$STATUS_JSON" "$TIME_JSON" "$HISTORY_AVAILABLE"
