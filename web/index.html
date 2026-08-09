@@ -472,6 +472,7 @@
     const mapDataOverlay = document.getElementById('mapDataOverlay');
     const infoPanel = document.querySelector('.info');
     const routerGuiLink = document.getElementById('routerGuiLink');
+    const googleMapsLink = document.getElementById('googlemaps');
     const trumaLink = document.getElementById('trumaLink');
 
     function configuredUrl(value, fallback) {
@@ -509,6 +510,22 @@
       const bottom = size.y - padding.paddingBottomRight[1];
 
       return L.point((left + right) / 2, (top + bottom) / 2);
+    }
+
+    // Build a Google Maps link for the geographic center currently visible below the portal controls.
+    function currentGoogleMapsUrl() {
+      const center = map.containerPointToLatLng(visibleCenterPoint());
+      const zoom = Math.max(0, Math.min(21, Math.round(map.getZoom())));
+      const coordinates = encodeURIComponent(center.lat.toFixed(6) + ',' + center.lng.toFixed(6));
+
+      return 'https://www.google.com/maps/@?api=1&map_action=map&center=' + coordinates + '&zoom=' + zoom;
+    }
+
+    // Keep the link aligned with the current map view, including keyboard and middle-click navigation.
+    function refreshGoogleMapsLink() {
+      if (!googleMapsLink.classList.contains('disabled')) {
+        googleMapsLink.href = currentGoogleMapsUrl();
+      }
     }
 
     function setViewBelowOverlay(latlng, zoom) {
@@ -591,6 +608,7 @@
 
     map.on('moveend zoomend', function() {
       scheduleHistoryMarkerRender();
+      refreshGoogleMapsLink();
 
       if (programmaticMove) {
         programmaticMove = false;
@@ -744,17 +762,17 @@
       });
     }
 
-    function setGoogleMapsPosition(latlng) {
-      const link = document.getElementById('googlemaps');
-      link.href = 'https://www.google.com/maps?q=' + latlng[0] + ',' + latlng[1];
-      link.classList.remove('disabled');
+    function enableGoogleMapsLink() {
+      googleMapsLink.classList.remove('disabled');
+      refreshGoogleMapsLink();
     }
 
-    function clearGoogleMapsPosition() {
-      const link = document.getElementById('googlemaps');
-      link.href = '#';
-      link.classList.add('disabled');
+    function disableGoogleMapsLink() {
+      googleMapsLink.href = '#';
+      googleMapsLink.classList.add('disabled');
     }
+
+    googleMapsLink.addEventListener('click', refreshGoogleMapsLink);
 
     function updateMapDataOverlay() {
       mapDataOverlay.classList.toggle('visible', !hasCurrentGpsFix && !lastHistoryLatLng);
@@ -764,7 +782,7 @@
       if (map.hasLayer(lastPositionMarker)) map.removeLayer(lastPositionMarker);
       marker.setLatLng(latlng);
       if (!map.hasLayer(marker)) marker.addTo(map);
-      setGoogleMapsPosition(latlng);
+      enableGoogleMapsLink();
       hasCurrentGpsFix = true;
       updateMapDataOverlay();
     }
@@ -774,7 +792,7 @@
       if (map.hasLayer(marker)) map.removeLayer(marker);
       lastPositionMarker.setLatLng(latlng);
       if (!map.hasLayer(lastPositionMarker)) lastPositionMarker.addTo(map);
-      setGoogleMapsPosition(latlng);
+      enableGoogleMapsLink();
       hasCurrentGpsFix = false;
       updateMapDataOverlay();
     }
@@ -782,7 +800,7 @@
     function hidePositionMarkers() {
       if (map.hasLayer(marker)) map.removeLayer(marker);
       if (map.hasLayer(lastPositionMarker)) map.removeLayer(lastPositionMarker);
-      clearGoogleMapsPosition();
+      disableGoogleMapsLink();
       hasCurrentGpsFix = false;
       updateMapDataOverlay();
     }
