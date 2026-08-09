@@ -202,12 +202,12 @@
     <section class="readings" aria-label="Neigungswerte">
       <div class="reading womo-panel">
         <span class="reading-label">Längsneigung</span>
-        <strong id="pitch" class="reading-value">-5.73°</strong>
+        <strong id="pitch" class="reading-value">--°</strong>
         <button id="pitchZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
       <div class="reading womo-panel">
         <span class="reading-label">Querneigung</span>
-        <strong id="roll" class="reading-value">-0.87°</strong>
+        <strong id="roll" class="reading-value">--°</strong>
         <button id="rollZero" class="womo-action-button zero-button" type="button">Nullpunkt setzen</button>
       </div>
     </section>
@@ -219,7 +219,7 @@
           <span class="axis-label rear">H</span>
           <span class="axis-label left">L</span>
           <span class="axis-label right">R</span>
-          <div id="bubble" class="bubble"></div>
+          <div id="bubble" class="bubble" hidden></div>
         </div>
         <span id="liftMarker1" class="lift-marker" hidden>anheben</span>
         <span id="liftMarker2" class="lift-marker" hidden>anheben</span>
@@ -242,18 +242,16 @@
   <script>
     const PORTAL_CONFIG = window.WOMO_PORTAL_CONFIG || {};
     const MAIN_URL = normalizeBaseUrl(PORTAL_CONFIG.esp32MainUrl || 'http://192.168.11.3/');
-    const EVENT_URL = `${MAIN_URL}/events`;
+    const TILT_DATA_URL = '/cgi-bin/tilt.json';
     const MAX_TILT_DEGREES = 10;
     const HINT_THRESHOLD = 0.3;
-    const CONNECTION_TIMEOUT_MS = 8000;
-    const RECONNECT_DELAY_MS = 15000;
+    const POLL_INTERVAL_MS = 2000;
     const LIFT_MARKER_LOW_X = 23;
     const LIFT_MARKER_HIGH_X = 77;
     const LIFT_MARKER_LOW_Y = 10;
     const LIFT_MARKER_HIGH_Y = 90;
     const DEMO_MODE = new URLSearchParams(window.location.search).has('demo');
-    const LOCAL_PREVIEW_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname) || window.location.protocol === 'file:';
-    const PREVIEW_MODE = DEMO_MODE || LOCAL_PREVIEW_MODE;
+    const PREVIEW_MODE = DEMO_MODE;
     const CALIBRATION_URL = `/cgi-bin/tilt_calibration.cgi${PREVIEW_MODE ? '?demo=1' : ''}`;
     const DEFAULT_CONFIG = {
       wheelbaseMm: 4035,
@@ -281,10 +279,10 @@
         state: 'warning',
         help: 'Zufällige Testwerte werden angezeigt.'
       },
-      fallbackDemo: {
-        text: 'Demomodus – keine ESP32-Daten',
-        state: 'warning',
-        help: 'Zufällige Testwerte werden angezeigt.'
+      unavailable: {
+        text: 'ESP32-Neigungsdaten nicht verfügbar',
+        state: 'error',
+        help: 'Pitch und Roll werden nicht angezeigt.'
       },
       calibrationSaveError: {
         text: 'Nullpunkt nicht gespeichert',
@@ -315,11 +313,8 @@
     const statusHelpElement = document.getElementById('statusHelp');
     const esp32MainLink = document.getElementById('esp32MainLink');
 
-    let source = null;
-    let connectionTimer = null;
-    let reconnectTimer = null;
-    let fallbackDemoActive = false;
-    let pendingLiveSensors = { pitch: null, roll: null };
+    let pollTimer = null;
+    let pollingEnabled = true;
     const rawSensors = PREVIEW_MODE ? { ...MOCK_SENSORS } : { pitch: null, roll: null };
     let calibration = { longitudinal: null, transverse: null };
     let calibrationReady = false;
@@ -359,12 +354,12 @@
     }
 
     function updateDisplay() {
-      const longitudinalOffset = fallbackDemoActive ? null : calibration.longitudinal;
-      const transverseOffset = fallbackDemoActive ? null : calibration.transverse;
-      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), longitudinalOffset);
-      const transverse = adjustedValue(mappedRawValue('transverse'), transverseOffset);
+      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), calibration.longitudinal);
+      const transverse = adjustedValue(mappedRawValue('transverse'), calibration.transverse);
+      const hasValues = Number.isFinite(longitudinal) && Number.isFinite(transverse);
       pitchElement.textContent = formatDegrees(longitudinal);
       rollElement.textContent = formatDegrees(transverse);
+      bubbleElement.hidden = !hasValues;
 
       const x = Number.isFinite(transverse) ? clamp(transverse / MAX_TILT_DEGREES, -1, 1) * 39 : 0;
       const y = Number.isFinite(longitudinal) ? clamp(-longitudinal / MAX_TILT_DEGREES, -1, 1) * 39 : 0;
@@ -377,6 +372,8 @@
 
       if (Number.isFinite(longitudinal) && Number.isFinite(transverse)) {
         levelElement.setAttribute('aria-label', `Längsneigung ${longitudinal.toFixed(2)} Grad, Querneigung ${transverse.toFixed(2)} Grad`);
+      } else {
+        levelElement.setAttribute('aria-label', 'Neigungsdaten nicht verfügbar');
       }
     }
 
@@ -405,7 +402,7 @@
       }
 
       const points = cornerLiftMarkers(longitudinal, transverse);
-      showLiftMarkers(PREVIEW_MODE || fallbackDemoActive ? points : points.filter(point => point.liftMm > 0));
+      showLiftMarkers(PREVIEW_MODE ? points : points.filter(point => point.liftMm > 0));
     }
 
     function cornerLiftMarkers(longitudinal, transverse) {
@@ -456,7 +453,7 @@
 
     function updateZeroButton(button, offset, rawValue, axis) {
       const active = Number.isFinite(offset);
-      button.disabled = fallbackDemoActive || !calibrationReady || !Number.isFinite(rawValue) || pendingCalibrationAxes.has(axis);
+      button.disabled = !calibrationReady || !Number.isFinite(rawValue) || pendingCalibrationAxes.has(axis);
       button.classList.toggle('active', active);
       button.textContent = active ? 'Nullpunkt löschen' : 'Nullpunkt setzen';
       button.setAttribute('aria-pressed', String(active));
@@ -526,77 +523,37 @@
       setStatus(message.text, message.state, message.help);
     }
 
-    // Close the current stream and cancel its connection timeout.
-    function closeConnection() {
-      window.clearTimeout(connectionTimer);
-      connectionTimer = null;
-      if (source) source.close();
-      source = null;
-    }
-
-    // Retry in the background while the clearly labelled demo stays visible.
-    function scheduleReconnect() {
-      window.clearTimeout(reconnectTimer);
-      reconnectTimer = window.setTimeout(connect, RECONNECT_DELAY_MS);
-    }
-
-    // Replace unavailable live values with new demo values and never retain stale data.
-    function activateFallbackDemo(eventSource) {
-      if (eventSource && source !== eventSource) return;
-      closeConnection();
-
-      if (!fallbackDemoActive) {
-        const demoSensors = createDemoSensors();
-        rawSensors.pitch = demoSensors.pitch;
-        rawSensors.roll = demoSensors.roll;
-      }
-
-      fallbackDemoActive = true;
-      pendingLiveSensors = { pitch: null, roll: null };
-      showStatus('fallbackDemo');
+    // Clear live values immediately after any authentication, network, or data error.
+    function showUnavailable() {
+      rawSensors.pitch = null;
+      rawSensors.roll = null;
+      showStatus('unavailable');
       updateDisplay();
-      scheduleReconnect();
     }
 
-    // Start a fresh ESP32 stream without mixing partial live values with demo data.
-    function connect() {
-      closeConnection();
-      window.clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      pendingLiveSensors = { pitch: null, roll: null };
-      if (!fallbackDemoActive) showStatus('connecting');
+    // Poll the same-origin router endpoint without exposing ESP32 credentials to the browser.
+    async function pollTiltData() {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
 
-      const eventSource = new EventSource(EVENT_URL, { withCredentials: true });
-      source = eventSource;
-      connectionTimer = window.setTimeout(() => activateFallbackDemo(eventSource), CONNECTION_TIMEOUT_MS);
-
-      eventSource.addEventListener('state', event => {
-        if (source !== eventSource) return;
-        let data;
-        try {
-          data = JSON.parse(event.data);
-        } catch (error) {
-          return;
+      try {
+        const response = await fetch(`${TILT_DATA_URL}?_=${Date.now()}`, { cache: 'no-store' });
+        const data = await response.json();
+        const pitch = Number(data.pitch);
+        const roll = Number(data.roll);
+        if (!response.ok || data.available !== true || !Number.isFinite(pitch) || !Number.isFinite(roll)) {
+          throw new Error('Tilt data unavailable');
         }
 
-        const value = Number(data.value);
-        if (!Number.isFinite(value)) return;
-        if (data.id === 'sensor-pitch') pendingLiveSensors.pitch = value;
-        if (data.id === 'sensor-roll') pendingLiveSensors.roll = value;
-        if (!Number.isFinite(pendingLiveSensors.pitch) || !Number.isFinite(pendingLiveSensors.roll)) return;
-
-        window.clearTimeout(connectionTimer);
-        connectionTimer = null;
-        rawSensors.pitch = pendingLiveSensors.pitch;
-        rawSensors.roll = pendingLiveSensors.roll;
-        fallbackDemoActive = false;
+        rawSensors.pitch = pitch;
+        rawSensors.roll = roll;
         showStatus('live');
         updateDisplay();
-      });
-
-      eventSource.addEventListener('error', () => {
-        activateFallbackDemo(eventSource);
-      });
+      } catch (error) {
+        showUnavailable();
+      } finally {
+        if (pollingEnabled) pollTimer = window.setTimeout(pollTiltData, POLL_INTERVAL_MS);
+      }
     }
 
     pitchZeroButton.addEventListener('click', () => toggleZero('longitudinal'));
@@ -619,12 +576,20 @@
         }
       }
       updateDisplay();
-      if (!PREVIEW_MODE) connect();
+      if (!PREVIEW_MODE) pollTiltData();
     }
 
     window.addEventListener('pagehide', () => {
-      closeConnection();
-      window.clearTimeout(reconnectTimer);
+      pollingEnabled = false;
+      window.clearTimeout(pollTimer);
+    });
+
+    // Resume polling when the browser restores this page from its back-forward cache.
+    window.addEventListener('pageshow', event => {
+      if (!event.persisted || PREVIEW_MODE) return;
+      pollingEnabled = true;
+      showStatus('connecting');
+      pollTiltData();
     });
 
     initialize();

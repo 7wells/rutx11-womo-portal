@@ -5,6 +5,8 @@ gps_track*.log
 *.gps.log
 *.gpx
 *.kml
+*.curl.conf
+*.password
 
 # Local tool artifacts
 .playwright-cli/

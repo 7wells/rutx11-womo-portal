@@ -23,6 +23,8 @@ check_tracked_path() {
 check_tracked_path '^web/data(/|$)' "Runtime data must not be tracked."
 check_tracked_path '(^|/)gps_track[^/]*\.log$' "GPS track logs must not be tracked."
 check_tracked_path '\.(gpx|kml)$' "GPS export files must not be tracked."
+check_tracked_path '\.curl\.conf$' "Local credential files must not be tracked."
+check_tracked_path '\.password$' "Local password files must not be tracked."
 
 if [ "$failures" -ne 0 ]; then
   echo "Private data check failed." >&2

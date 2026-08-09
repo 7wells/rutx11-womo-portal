@@ -1,0 +1,100 @@
+#!/bin/sh
+
+ESP32_BASE_URL="${WOMO_ESP32_BASE_URL:-http://192.168.11.3}"
+PASSWORD_FILE="${WOMO_ESP32_PASSWORD_FILE:-/usr/local/home/womo-data/esp32-main.password}"
+CURL_BIN="${WOMO_CURL_BIN:-curl}"
+JSONFILTER_BIN="${WOMO_JSONFILTER_BIN:-jsonfilter}"
+AUTH_CONFIG_FILE="/tmp/womo-esp32-auth.$$"
+
+# Print only a coarse failure stage when diagnostics are explicitly enabled.
+debug_log() {
+  [ "${WOMO_TILT_DEBUG:-0}" = "1" ] || return 0
+  printf 'DEBUG: %s\n' "$1" >&2
+}
+
+# Remove the temporary in-memory curl configuration after every CGI request.
+cleanup() {
+  rm -f "$AUTH_CONFIG_FILE"
+}
+
+# Return an explicit unavailable response without exposing internal error details.
+send_unavailable() {
+  printf 'Status: 503 Service Unavailable\r\n'
+  printf 'Content-Type: application/json\r\n'
+  printf 'Cache-Control: no-store\r\n\r\n'
+  printf '{"available":false}\n'
+  exit 0
+}
+
+# Escape the two characters that have special meaning in a curl config value.
+escape_curl_config_value() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Build a protected RAM-only curl config and let curl select Basic or Digest.
+prepare_auth_config() {
+  password="$(cat "$PASSWORD_FILE")"
+  [ -n "$password" ] || {
+    debug_log 'ESP32 password file was empty'
+    return 1
+  }
+  escaped_password="$(escape_curl_config_value "$password")" || return 1
+
+  {
+    printf '%s\n' 'anyauth'
+    printf 'user = "user:%s"\n' "$escaped_password"
+  } > "$AUTH_CONFIG_FILE"
+  chmod 600 "$AUTH_CONFIG_FILE"
+}
+
+# Accept only ordinary finite decimal values from the ESP32 JSON response.
+is_tilt_value() {
+  awk -v value="$1" 'BEGIN {
+    valid = value ~ /^-?[0-9]+([.][0-9]+)?$/ && value >= -180 && value <= 180
+    exit(valid ? 0 : 1)
+  }'
+}
+
+# Fetch one authenticated ESP32 sensor document and extract its JSON value field.
+fetch_sensor_value() {
+  sensor="$1"
+  response="$(
+    "$CURL_BIN" \
+      --config "$AUTH_CONFIG_FILE" \
+      --silent \
+      --show-error \
+      --fail \
+      --connect-timeout 2 \
+      --max-time 4 \
+      "$ESP32_BASE_URL/sensor/$sensor" 2>/dev/null
+  )" || {
+    debug_log 'authenticated ESP32 request was rejected or unreachable'
+    return 1
+  }
+
+  value="$(printf '%s' "$response" | "$JSONFILTER_BIN" -e '@.value' 2>/dev/null)" || {
+    debug_log 'ESP32 response could not be parsed as JSON'
+    return 1
+  }
+  is_tilt_value "$value" || {
+    debug_log 'ESP32 response did not contain a valid tilt value'
+    return 1
+  }
+  printf '%s\n' "$value"
+}
+
+trap cleanup 0
+trap 'exit 1' 1 2 15
+umask 077
+
+command -v "$CURL_BIN" >/dev/null 2>&1 || send_unavailable
+command -v "$JSONFILTER_BIN" >/dev/null 2>&1 || send_unavailable
+[ -r "$PASSWORD_FILE" ] || send_unavailable
+prepare_auth_config || send_unavailable
+
+PITCH="$(fetch_sensor_value pitch)" || send_unavailable
+ROLL="$(fetch_sensor_value roll)" || send_unavailable
+
+printf 'Content-Type: application/json\r\n'
+printf 'Cache-Control: no-store\r\n\r\n'
+printf '{"available":true,"pitch":%s,"roll":%s}\n' "$PITCH" "$ROLL"

@@ -15,6 +15,9 @@ SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
 LOGGER_SCRIPT="/usr/local/bin/womo_gps_logger.sh"
 LOGGER_INIT="/etc/init.d/womo-gps-logger"
 UPDATE_SCRIPT="/usr/local/bin/womo-portal-update"
+ESP32_PASSWORD_SCRIPT="/usr/local/bin/womo-portal-set-esp32-password"
+ESP32_PASSWORD_FILE="$PERSISTENT_DATA_DIR/esp32-main.password"
+ESP32_LEGACY_CREDENTIALS_FILE="$PERSISTENT_DATA_DIR/esp32-main.curl.conf"
 CRON_FILE="/etc/crontabs/root"
 CRON_ENTRY="*/5 * * * * $SYNC_SCRIPT"
 LEAFLET_VERSION="1.9.4"
@@ -28,6 +31,7 @@ SYNC_SOURCE="$REPO_ROOT/scripts/sync_womo_gps_track.sh"
 LOGGER_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.sh"
 LOGGER_INIT_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.init"
 UPDATE_SOURCE="$REPO_ROOT/scripts/update_womo_portal.sh"
+ESP32_PASSWORD_SOURCE="$REPO_ROOT/scripts/set_womo_esp32_password.sh"
 
 status() {
   echo "==> $*"
@@ -179,6 +183,39 @@ install_update_script() {
   mv -f "$update_target" "$UPDATE_SCRIPT"
 }
 
+# Install the local password helper without embedding any credentials.
+install_esp32_password_script() {
+  status "Installing ESP32 credential helper"
+
+  password_target="$ESP32_PASSWORD_SCRIPT.tmp.$$"
+  cp "$ESP32_PASSWORD_SOURCE" "$password_target"
+  chmod 755 "$password_target"
+  mv -f "$password_target" "$ESP32_PASSWORD_SCRIPT"
+}
+
+# Import a password only from the environment and otherwise preserve local credentials.
+configure_esp32_credentials() {
+  if [ -n "${WOMO_ESP32_PASSWORD:-}" ]; then
+    "$ESP32_PASSWORD_SCRIPT" >/dev/null
+    status "Updated ESP32 Main credentials from WOMO_ESP32_PASSWORD"
+  elif [ -f "$ESP32_PASSWORD_FILE" ]; then
+    status "Preserving existing ESP32 Main credentials"
+  elif [ -f "$ESP32_LEGACY_CREDENTIALS_FILE" ]; then
+    status "ESP32 credential format changed; run womo-portal-set-esp32-password"
+  else
+    status "ESP32 Main credentials not configured; run womo-portal-set-esp32-password"
+  fi
+}
+
+# Report missing optional tools without breaking installations that do not use tilt data.
+check_tilt_dependencies() {
+  if command -v curl >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+    status "ESP32 tilt dependencies available"
+  else
+    status "ESP32 tilt data unavailable until curl and jsonfilter are installed"
+  fi
+}
+
 migrate_legacy_data() {
   status "Migrating legacy GPS data if needed"
 
@@ -207,10 +244,12 @@ set_permissions() {
   chmod 755 "$CGI_DIR/gps.json"
   chmod 755 "$CGI_DIR/gps_export.cgi"
   chmod 755 "$CGI_DIR/gps_track.cgi"
+  chmod 755 "$CGI_DIR/tilt.json"
   chmod 755 "$CGI_DIR/tilt_calibration.cgi"
   chmod 644 "$CGI_DIR/gps_lib.sh"
   chmod 755 "$SYNC_SCRIPT"
   chmod 755 "$LOGGER_SCRIPT" "$LOGGER_INIT"
+  chmod 755 "$ESP32_PASSWORD_SCRIPT"
   chmod 755 "$PERSISTENT_DATA_DIR"
   chmod 755 "$GPS_DATA_DIR"
   find "$GPS_DATA_DIR" -type f -name '*.csv' -exec chmod 644 {} \; 2>/dev/null || true
@@ -223,6 +262,8 @@ set_permissions() {
       chown -R "$CGI_USER" "$PERSISTENT_DATA_DIR"
     fi
   fi
+
+  [ ! -f "$ESP32_PASSWORD_FILE" ] || chmod 600 "$ESP32_PASSWORD_FILE"
 }
 
 install_cron() {
@@ -264,11 +305,13 @@ need_file "$WEB_SOURCE/cgi-bin/gps.json"
 need_file "$WEB_SOURCE/cgi-bin/gps_export.cgi"
 need_file "$WEB_SOURCE/cgi-bin/gps_lib.sh"
 need_file "$WEB_SOURCE/cgi-bin/gps_track.cgi"
+need_file "$WEB_SOURCE/cgi-bin/tilt.json"
 need_file "$WEB_SOURCE/cgi-bin/tilt_calibration.cgi"
 need_file "$SYNC_SOURCE"
 need_file "$LOGGER_SOURCE"
 need_file "$LOGGER_INIT_SOURCE"
 need_file "$UPDATE_SOURCE"
+need_file "$ESP32_PASSWORD_SOURCE"
 
 status "Creating target directories"
 mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
@@ -280,6 +323,9 @@ install_leaflet
 install_sync_script
 install_gps_logger
 install_update_script
+install_esp32_password_script
+configure_esp32_credentials
+check_tilt_dependencies
 "$SYNC_SCRIPT" --import-existing >/dev/null
 set_permissions
 install_cron

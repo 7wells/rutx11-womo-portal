@@ -10,6 +10,10 @@ This project installs a small local camper portal on a compatible Teltonika
 RUTX11 router. It shows a mobile-friendly GPS map, GPS history/export tools,
 and a local tilt/level page for an ESP32-based vehicle sensor.
 
+ESP32 credentials are configured locally on the router after deployment with
+`womo-portal-set-esp32-password`. They are never stored in this repository or
+sent to the browser. See [ESP32 Main credentials](#esp32-main-credentials).
+
 If your local device addresses differ, edit `web/portal-config.js` before
 running the installer. See [Local device URLs](#local-device-urls).
 
@@ -38,7 +42,7 @@ router through a tunnel.
 - Browser-independent background GPS recording
 - GPS tracking UI (Live / 24h / 4w)
 - Date range selection and CSV/GPX export
-- Local tilt/level page with demo fallback
+- Local tilt/level page with authenticated ESP32 live data and explicit demo mode
 - Local Leaflet asset caching
 - No cloud dependency
 - Lightweight CGI backend
@@ -71,6 +75,26 @@ router through a tunnel.
 - The default values match one common local setup, but they may need adjustment
   for your network.
 
+### ESP32 Main credentials
+
+- Live tilt data is read server-side from `/sensor/pitch` and `/sensor/roll`.
+  Curl automatically selects the HTTP authentication scheme offered by the
+  ESP32, currently Basic and also compatible with Digest. The browser receives
+  only the numeric JSON `value` fields through the local portal CGI.
+- Run `womo-portal-set-esp32-password` as root on the router and enter the
+  password at the hidden prompt. The username is fixed to `user`.
+- For automated deployments, the installer also accepts the password through
+  the temporary `WOMO_ESP32_PASSWORD` environment variable. Do not put its
+  value in repository files, command-line arguments, or shell history.
+- The generated password file is stored outside the web root at
+  `/usr/local/home/womo-data/esp32-main.password`, restricted to the CGI user,
+  and preserved by normal portal updates.
+- Live tilt access requires the RutOS/OpenWrt commands `curl` and `jsonfilter`.
+  Because the current ESP32 firmware offers Basic authentication over HTTP,
+  use this only on a trusted local network. Missing credentials, failed
+  authentication, invalid JSON, or unavailable endpoints are displayed as
+  unavailable values; they do not activate random demo data.
+
 ### Deploy on the RUTX11
 
 ```sh
@@ -80,6 +104,7 @@ tar -xzf womo.tar.gz
 cd rutx11-womo-portal-main
 # Optional: edit web/portal-config.js if your device URLs differ.
 sh scripts/install_womo_landing.sh
+womo-portal-set-esp32-password
 ```
 
 After the first successful deployment, install future versions with:
@@ -99,9 +124,9 @@ device URLs are not replaced by repository defaults.
   installs the persistent `womo-portal-update` command under `/usr/local/bin`.
 - Use the full deployment procedure for first setup or after a factory reset.
   Use `womo-portal-update` for normal updates.
-- The update command preserves the installed `portal-config.js`. GPS history
-  and tilt calibration already remain outside the web root and are not
-  replaced by an update.
+- The update command preserves the installed `portal-config.js`. GPS history,
+  ESP32 credentials, and tilt calibration already remain outside the web root
+  and are not replaced by an update.
 - Existing GPS history in `/usr/local/home/root/womo-data/gps_track.log` is not
   overwritten by the installer and is migrated into monthly files by the sync
   script.
@@ -132,6 +157,9 @@ device URLs are not replaced by repository defaults.
 
 - persistent tilt calibration:
   /usr/local/home/womo-data/tilt_calibration.json
+
+- private ESP32 credentials:
+  /usr/local/home/womo-data/esp32-main.password
 
 - monthly GPS track files:
   /usr/local/home/womo-data/gps/YYYY-MM.csv
@@ -186,9 +214,11 @@ device URLs are not replaced by repository defaults.
 - Tilt page:
   - http://ROUTER_IP:8080/tilt.html
   - http://ROUTER_IP:8080/tilt.html?demo=1
+  - http://ROUTER_IP:8080/cgi-bin/tilt.json
 
   The tilt page is optional and needs a compatible ESP32 Main endpoint for live
-  values. Use `?demo=1` only to check the layout without live ESP32 data.
+  values. Use `?demo=1` only to check the layout with clearly labelled random
+  values. Normal mode never substitutes demo values for unavailable live data.
 
 - Tilt calibration diagnostics:
   - http://ROUTER_IP:8080/cgi-bin/tilt_calibration.cgi
