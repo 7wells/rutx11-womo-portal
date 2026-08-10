@@ -79,6 +79,22 @@
     }
     .zero-button { width: 100%; min-height: 32px; margin-top: 8px; padding: 5px 7px; font-size: .82rem; }
 
+    .tilt-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 36px;
+      margin-bottom: 12px;
+      padding: 8px 12px;
+    }
+
+    .mode-button {
+      width: 100%;
+      min-height: 34px;
+      padding: 6px 8px;
+      font-size: .8rem;
+      white-space: nowrap;
+    }
+
     .level-card { padding: 8px; }
 
     .level {
@@ -177,6 +193,8 @@
       header { gap: 6px; }
       h1 { font-size: 1.1rem; white-space: nowrap; }
       .level-card { padding: 8px; }
+      .tilt-controls { padding-block: 7px; }
+      .tilt-controls .mode-button { padding-inline: 4px; font-size: .66rem; }
       .status-card { padding-block: 7px; }
       .status-help { font-size: .7rem; line-height: 1.18; }
       .womo-action-button { padding-inline: 8px; font-size: .85rem; }
@@ -212,6 +230,11 @@
       </div>
     </section>
 
+    <section class="tilt-controls womo-panel" aria-label="Anzeigeeinstellungen">
+      <button id="reactionMode" class="womo-action-button mode-button" type="button">Reaktion: träge</button>
+      <button id="sensitivityMode" class="womo-action-button mode-button" type="button">Empfindlichkeit: grob</button>
+    </section>
+
     <section class="level-card womo-panel" aria-label="Libelle">
       <div id="level" class="level" role="img" aria-label="Keine Neigungswerte verfügbar">
         <div class="level-dial">
@@ -244,8 +267,15 @@
     const MAIN_URL = normalizeBaseUrl(PORTAL_CONFIG.esp32MainUrl || 'http://192.168.11.3/');
     const TILT_DATA_URL = '/cgi-bin/tilt.json';
     const MAX_TILT_DEGREES = 10;
-    const HINT_THRESHOLD = 0.3;
-    const POLL_INTERVAL_MS = 2000;
+    const POLL_INTERVAL_MS = 750;
+    const REACTION_MODES = Object.freeze({
+      slow: { label: 'träge', smoothingFactor: 0.2 },
+      fast: { label: 'flink', smoothingFactor: 0.65 }
+    });
+    const SENSITIVITY_MODES = Object.freeze({
+      coarse: { label: 'grob', thresholdDegrees: 0.3 },
+      fine: { label: 'fein', thresholdDegrees: 0.1 }
+    });
     const LIFT_MARKER_LOW_X = 23;
     const LIFT_MARKER_HIGH_X = 77;
     const LIFT_MARKER_LOW_Y = 10;
@@ -302,6 +332,8 @@
     const levelElement = document.getElementById('level');
     const pitchZeroButton = document.getElementById('pitchZero');
     const rollZeroButton = document.getElementById('rollZero');
+    const reactionModeButton = document.getElementById('reactionMode');
+    const sensitivityModeButton = document.getElementById('sensitivityMode');
     const liftMarkerElements = [
       document.getElementById('liftMarker1'),
       document.getElementById('liftMarker2'),
@@ -320,6 +352,10 @@
     let calibrationReady = false;
     let calibrationSaveQueue = Promise.resolve();
     let calibrationSaveVersion = 0;
+    let reactionMode = 'slow';
+    let sensitivityMode = 'coarse';
+    const filteredTilt = { longitudinal: null, transverse: null };
+    const displayedTilt = { longitudinal: null, transverse: null };
     const pendingCalibrationAxes = new Set();
 
     esp32MainLink.href = `${MAIN_URL}/`;
@@ -350,12 +386,13 @@
     }
 
     function formatDegrees(value) {
-      return Number.isFinite(value) ? `${value.toFixed(2)}°` : '--°';
+      return Number.isFinite(value) ? `${value.toFixed(1)}°` : '--°';
     }
 
+    // Render already filtered values without changing their internal precision.
     function updateDisplay() {
-      const longitudinal = adjustedValue(mappedRawValue('longitudinal'), calibration.longitudinal);
-      const transverse = adjustedValue(mappedRawValue('transverse'), calibration.transverse);
+      const longitudinal = displayedTilt.longitudinal;
+      const transverse = displayedTilt.transverse;
       const hasValues = Number.isFinite(longitudinal) && Number.isFinite(transverse);
       pitchElement.textContent = formatDegrees(longitudinal);
       rollElement.textContent = formatDegrees(transverse);
@@ -371,10 +408,69 @@
       updateLiftHint(longitudinal, transverse);
 
       if (Number.isFinite(longitudinal) && Number.isFinite(transverse)) {
-        levelElement.setAttribute('aria-label', `Längsneigung ${longitudinal.toFixed(2)} Grad, Querneigung ${transverse.toFixed(2)} Grad`);
+        levelElement.setAttribute('aria-label', `Längsneigung ${longitudinal.toFixed(1)} Grad, Querneigung ${transverse.toFixed(1)} Grad`);
       } else {
         levelElement.setAttribute('aria-label', 'Neigungsdaten nicht verfügbar');
       }
+    }
+
+    // Reset filter state so unavailable or recalibrated data cannot leak into later readings.
+    function resetTiltProcessing() {
+      filteredTilt.longitudinal = null;
+      filteredTilt.transverse = null;
+      displayedTilt.longitudinal = null;
+      displayedTilt.transverse = null;
+    }
+
+    // Smooth full-precision sensor values and apply the selected change threshold before rendering.
+    function processTiltValues(force = false) {
+      const values = {
+        longitudinal: adjustedValue(mappedRawValue('longitudinal'), calibration.longitudinal),
+        transverse: adjustedValue(mappedRawValue('transverse'), calibration.transverse)
+      };
+
+      if (!Number.isFinite(values.longitudinal) || !Number.isFinite(values.transverse)) {
+        resetTiltProcessing();
+        updateDisplay();
+        return;
+      }
+
+      const smoothingFactor = REACTION_MODES[reactionMode].smoothingFactor;
+      const threshold = SENSITIVITY_MODES[sensitivityMode].thresholdDegrees;
+      Object.keys(values).forEach(axis => {
+        const value = values[axis];
+        if (force || !Number.isFinite(filteredTilt[axis])) {
+          filteredTilt[axis] = value;
+          displayedTilt[axis] = value;
+          return;
+        }
+
+        filteredTilt[axis] += (value - filteredTilt[axis]) * smoothingFactor;
+        if (!Number.isFinite(displayedTilt[axis]) || Math.abs(filteredTilt[axis] - displayedTilt[axis]) >= threshold) {
+          displayedTilt[axis] = filteredTilt[axis];
+        }
+      });
+      updateDisplay();
+    }
+
+    // Show the active reaction and sensitivity choices on their toggle buttons.
+    function updateModeButtons() {
+      reactionModeButton.textContent = `Reaktion: ${REACTION_MODES[reactionMode].label}`;
+      reactionModeButton.setAttribute('aria-pressed', String(reactionMode === 'fast'));
+      sensitivityModeButton.textContent = `Empfindlichkeit: ${SENSITIVITY_MODES[sensitivityMode].label}`;
+      sensitivityModeButton.setAttribute('aria-pressed', String(sensitivityMode === 'fine'));
+    }
+
+    // Apply a newly lowered sensitivity threshold to the latest filtered values immediately.
+    function applySensitivityThreshold() {
+      const threshold = SENSITIVITY_MODES[sensitivityMode].thresholdDegrees;
+      Object.keys(displayedTilt).forEach(axis => {
+        if (Number.isFinite(filteredTilt[axis]) && Number.isFinite(displayedTilt[axis]) &&
+            Math.abs(filteredTilt[axis] - displayedTilt[axis]) >= threshold) {
+          displayedTilt[axis] = filteredTilt[axis];
+        }
+      });
+      updateDisplay();
     }
 
     function mappedRawValue(axis) {
@@ -394,25 +490,26 @@
         return;
       }
 
-      const longitudinalLevel = Math.abs(longitudinal) <= HINT_THRESHOLD;
-      const transverseLevel = Math.abs(transverse) <= HINT_THRESHOLD;
+      const threshold = SENSITIVITY_MODES[sensitivityMode].thresholdDegrees;
+      const longitudinalLevel = Math.abs(longitudinal) <= threshold;
+      const transverseLevel = Math.abs(transverse) <= threshold;
       if (longitudinalLevel && transverseLevel) {
         hideLiftMarkers();
         return;
       }
 
-      const points = cornerLiftMarkers(longitudinal, transverse);
+      const points = cornerLiftMarkers(longitudinal, transverse, threshold);
       showLiftMarkers(PREVIEW_MODE ? points : points.filter(point => point.liftMm > 0));
     }
 
-    function cornerLiftMarkers(longitudinal, transverse) {
+    function cornerLiftMarkers(longitudinal, transverse, threshold) {
       const longitudinalLift = Math.tan(Math.abs(longitudinal) * Math.PI / 180) * VEHICLE_CONFIG.wheelbaseMm;
       const frontTransverseLift = Math.tan(Math.abs(transverse) * Math.PI / 180) * VEHICLE_CONFIG.frontTrackMm;
       const rearTransverseLift = Math.tan(Math.abs(transverse) * Math.PI / 180) * VEHICLE_CONFIG.rearTrackMm;
-      const frontLift = longitudinal < -HINT_THRESHOLD ? longitudinalLift : 0;
-      const rearLift = longitudinal > HINT_THRESHOLD ? longitudinalLift : 0;
-      const leftLiftFactor = transverse > HINT_THRESHOLD ? 1 : 0;
-      const rightLiftFactor = transverse < -HINT_THRESHOLD ? 1 : 0;
+      const frontLift = longitudinal < -threshold ? longitudinalLift : 0;
+      const rearLift = longitudinal > threshold ? longitudinalLift : 0;
+      const leftLiftFactor = transverse > threshold ? 1 : 0;
+      const rightLiftFactor = transverse < -threshold ? 1 : 0;
 
       return [
         { x: LIFT_MARKER_LOW_X, y: LIFT_MARKER_LOW_Y, liftMm: frontLift + frontTransverseLift * leftLiftFactor },
@@ -433,18 +530,14 @@
         marker.style.right = point.x < 50 ? 'auto' : '10px';
         marker.style.top = `${points[index].y}%`;
         marker.style.transform = 'translateY(-50%)';
-        const liftCm = point.liftMm / 10;
-        marker.textContent = `${formatLiftCm(points[index].liftMm)} cm\n${liftCm === 0 ? 'ok' : 'anheben'}`;
+        const liftCm = Math.round(point.liftMm / 10);
+        marker.textContent = `${liftCm} cm\n${liftCm === 0 ? 'ok' : 'anheben'}`;
         marker.classList.toggle('muted', liftCm === 0);
         marker.classList.toggle('ok', liftCm > 0 && liftCm < 5);
         marker.classList.toggle('warning', liftCm >= 5 && liftCm < 10);
         marker.classList.toggle('critical', liftCm >= 10);
         marker.hidden = false;
       });
-    }
-
-    function formatLiftCm(liftMm) {
-      return String(Math.round(liftMm / 10));
     }
 
     function hideLiftMarkers() {
@@ -494,7 +587,7 @@
       nextCalibration[axis] = Number.isFinite(calibration[axis]) ? null : rawValue;
       calibration = nextCalibration;
       pendingCalibrationAxes.add(axis);
-      updateDisplay();
+      processTiltValues(true);
       const saveVersion = ++calibrationSaveVersion;
       calibrationSaveQueue = calibrationSaveQueue
         .catch(() => {})
@@ -507,7 +600,7 @@
         })
         .finally(() => {
           pendingCalibrationAxes.delete(axis);
-          updateDisplay();
+          processTiltValues(true);
         });
     }
 
@@ -527,6 +620,7 @@
     function showUnavailable() {
       rawSensors.pitch = null;
       rawSensors.roll = null;
+      resetTiltProcessing();
       showStatus('unavailable');
       updateDisplay();
     }
@@ -548,7 +642,7 @@
         rawSensors.pitch = pitch;
         rawSensors.roll = roll;
         showStatus('live');
-        updateDisplay();
+        processTiltValues();
       } catch (error) {
         showUnavailable();
       } finally {
@@ -558,6 +652,15 @@
 
     pitchZeroButton.addEventListener('click', () => toggleZero('longitudinal'));
     rollZeroButton.addEventListener('click', () => toggleZero('transverse'));
+    reactionModeButton.addEventListener('click', () => {
+      reactionMode = reactionMode === 'slow' ? 'fast' : 'slow';
+      updateModeButtons();
+    });
+    sensitivityModeButton.addEventListener('click', () => {
+      sensitivityMode = sensitivityMode === 'coarse' ? 'fine' : 'coarse';
+      updateModeButtons();
+      applySensitivityThreshold();
+    });
 
     async function initialize() {
       if (PREVIEW_MODE) {
@@ -575,7 +678,8 @@
           showStatus('calibrationLoadError');
         }
       }
-      updateDisplay();
+      updateModeButtons();
+      processTiltValues(true);
       if (!PREVIEW_MODE) pollTiltData();
     }
 
