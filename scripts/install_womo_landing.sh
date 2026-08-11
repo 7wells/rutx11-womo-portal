@@ -14,6 +14,8 @@ LEAFLET_MARKER="$LEAFLET_DIR/.leaflet-version"
 SYNC_SCRIPT="/usr/local/bin/sync_womo_gps_track.sh"
 LOGGER_SCRIPT="/usr/local/bin/womo_gps_logger.sh"
 LOGGER_INIT="/etc/init.d/womo-gps-logger"
+WATCHDOG_SCRIPT="/usr/local/bin/womo_portal_watchdog.sh"
+WATCHDOG_INIT="/etc/init.d/womo-portal-watchdog"
 UPDATE_SCRIPT="/usr/local/bin/womo-portal-update"
 ESP32_PASSWORD_SCRIPT="/usr/local/bin/womo-portal-set-esp32-password"
 ESP32_PASSWORD_FILE="$PERSISTENT_DATA_DIR/esp32-main.password"
@@ -30,6 +32,8 @@ LEAFLET_SOURCE="$WEB_SOURCE/assets/leaflet"
 SYNC_SOURCE="$REPO_ROOT/scripts/sync_womo_gps_track.sh"
 LOGGER_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.sh"
 LOGGER_INIT_SOURCE="$REPO_ROOT/scripts/womo_gps_logger.init"
+WATCHDOG_SOURCE="$REPO_ROOT/scripts/womo_portal_watchdog.sh"
+WATCHDOG_INIT_SOURCE="$REPO_ROOT/scripts/womo_portal_watchdog.init"
 UPDATE_SOURCE="$REPO_ROOT/scripts/update_womo_portal.sh"
 ESP32_PASSWORD_SOURCE="$REPO_ROOT/scripts/set_womo_esp32_password.sh"
 
@@ -150,6 +154,11 @@ stop_gps_logger() {
   [ ! -x "$LOGGER_INIT" ] || "$LOGGER_INIT" stop >/dev/null 2>&1 || true
 }
 
+# Stop the watchdog so it does not react while portal files are being replaced.
+stop_portal_watchdog() {
+  [ ! -x "$WATCHDOG_INIT" ] || "$WATCHDOG_INIT" stop >/dev/null 2>&1 || true
+}
+
 # Install the foreground logger and its procd service definition atomically.
 install_gps_logger() {
   status "Installing background GPS logger"
@@ -166,6 +175,22 @@ install_gps_logger() {
   mv -f "$init_target" "$LOGGER_INIT"
 }
 
+# Install the portal watchdog and its procd service definition atomically.
+install_portal_watchdog() {
+  status "Installing portal watchdog"
+
+  watchdog_target="$WATCHDOG_SCRIPT.tmp.$$"
+  init_target="$WATCHDOG_INIT.tmp.$$"
+
+  cp "$WATCHDOG_SOURCE" "$watchdog_target"
+  chmod 755 "$watchdog_target"
+  mv -f "$watchdog_target" "$WATCHDOG_SCRIPT"
+
+  cp "$WATCHDOG_INIT_SOURCE" "$init_target"
+  chmod 755 "$init_target"
+  mv -f "$init_target" "$WATCHDOG_INIT"
+}
+
 # Enable background recording at boot and start it immediately.
 start_gps_logger() {
   status "Enabling background GPS logger"
@@ -173,6 +198,13 @@ start_gps_logger() {
   # The installer already stopped the previous service before replacing it.
   # Starting directly avoids a redundant procd stop request for a missing service.
   "$LOGGER_INIT" start
+}
+
+# Enable the watchdog at boot after all monitored services are configured.
+start_portal_watchdog() {
+  status "Enabling portal watchdog"
+  "$WATCHDOG_INIT" enable
+  "$WATCHDOG_INIT" start
 }
 
 # Install the updater atomically so it can safely replace a running copy.
@@ -251,6 +283,7 @@ set_permissions() {
   chmod 644 "$CGI_DIR/gps_lib.sh"
   chmod 755 "$SYNC_SCRIPT"
   chmod 755 "$LOGGER_SCRIPT" "$LOGGER_INIT"
+  chmod 755 "$WATCHDOG_SCRIPT" "$WATCHDOG_INIT"
   chmod 755 "$ESP32_PASSWORD_SCRIPT"
   chmod 755 "$PERSISTENT_DATA_DIR"
   chmod 755 "$GPS_DATA_DIR"
@@ -312,18 +345,22 @@ need_file "$WEB_SOURCE/cgi-bin/tilt_calibration.cgi"
 need_file "$SYNC_SOURCE"
 need_file "$LOGGER_SOURCE"
 need_file "$LOGGER_INIT_SOURCE"
+need_file "$WATCHDOG_SOURCE"
+need_file "$WATCHDOG_INIT_SOURCE"
 need_file "$UPDATE_SOURCE"
 need_file "$ESP32_PASSWORD_SOURCE"
 
 status "Creating target directories"
 mkdir -p "$WEB_ROOT" "$CGI_DIR" "$PERSISTENT_DATA_DIR" "$GPS_DATA_DIR" "$LEAFLET_DIR" "$(dirname "$SYNC_SCRIPT")" /tmp/womo
 
+stop_portal_watchdog
 stop_gps_logger
 install_web_files
 migrate_legacy_data
 install_leaflet
 install_sync_script
 install_gps_logger
+install_portal_watchdog
 install_update_script
 install_esp32_password_script
 configure_esp32_credentials
@@ -333,6 +370,7 @@ set_permissions
 install_cron
 start_gps_logger
 configure_uhttpd
+start_portal_watchdog
 
 status "WoMo portal installation completed."
 status "Open http://<router-ip>:8080/"

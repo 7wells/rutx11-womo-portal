@@ -47,6 +47,7 @@ router through a tunnel.
 - No cloud dependency
 - Lightweight CGI backend
 - Flash-friendly GPS persistence design
+- Local watchdog for portal and GPS service recovery
 
 ### Project structure
 
@@ -62,6 +63,7 @@ router through a tunnel.
   - installation script
   - one-command portal updater
   - procd-managed background GPS logger
+  - procd-managed portal watchdog
   - GPS track sync script
   - private data safety check
 
@@ -121,7 +123,8 @@ device URLs are not replaced by repository defaults.
 - The installer recreates `/usr/local/home/www/womo`, installs the web files,
   enables the CGI scripts, prepares `/usr/local/home/womo-data`, and
   configures uhttpd on port 8080. It also enables the background GPS logger and
-  installs the persistent `womo-portal-update` command under `/usr/local/bin`.
+  portal watchdog, and installs the persistent `womo-portal-update` command
+  under `/usr/local/bin`.
 - Use the full deployment procedure for first setup or after a factory reset.
   Use `womo-portal-update` for normal updates.
 - The update command preserves the installed `portal-config.js`. GPS history,
@@ -175,6 +178,22 @@ device URLs are not replaced by repository defaults.
   CSV contains `timestamp,datetime,latitude,longitude`; GPX uses ISO timestamps
   with the Europe/Berlin UTC offset.
 
+### Portal watchdog
+
+- The watchdog checks the map page, local GPS CGI, background GPS logger, and
+  five-minute persistence path every 60 seconds.
+- A component is recovered only after three consecutive failed checks.
+  Additional recovery attempts for the same component wait at least 5 minutes.
+- Portal recovery restarts uhttpd, logger recovery starts the GPS logger, and
+  persistence recovery restores the cron entry, restarts cron, and flushes an
+  overdue pending batch.
+- ESP32 availability is intentionally not part of portal health. A powered-off
+  ESP32 therefore never restarts the portal.
+- The watchdog never reboots the router and never downloads repository code.
+  CPU, memory, storage, and notifications remain the responsibility of RutOS or
+  external monitoring such as RMS.
+- Inspect watchdog events with `logread -e womo-watchdog`.
+
 ### Installed paths
 
 - web root:
@@ -192,6 +211,12 @@ device URLs are not replaced by repository defaults.
 
 - GPS logger executable:
   /usr/local/bin/womo_gps_logger.sh
+
+- portal watchdog service:
+  /etc/init.d/womo-portal-watchdog
+
+- portal watchdog executable:
+  /usr/local/bin/womo_portal_watchdog.sh
 
 - legacy persistent data source:
   /usr/local/home/root/womo-data
