@@ -170,7 +170,9 @@ install_gps_logger() {
 start_gps_logger() {
   status "Enabling background GPS logger"
   "$LOGGER_INIT" enable
-  "$LOGGER_INIT" restart
+  # The installer already stopped the previous service before replacing it.
+  # Starting directly avoids a redundant procd stop request for a missing service.
+  "$LOGGER_INIT" start
 }
 
 # Install the updater atomically so it can safely replace a running copy.
