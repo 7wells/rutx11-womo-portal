@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   generic-privacy-check:
-    uses: 7wells/repo-privacy-check/.github/workflows/privacy-check.yml@daef1143e8bc25ea04f5ab5f46b0e769a4288c8d # v0.3.2 full-scan workflow
+    uses: 7wells/repo-privacy-check-public/.github/workflows/privacy-check.yml@d689041eb5004e45c1902b6e76659c7473aa0afa # v0.3.2 public full-scan workflow
 
   private-data-check:
     needs: generic-privacy-check
