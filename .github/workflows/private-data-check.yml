@@ -3,9 +3,18 @@ name: Private data check
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
+  generic-privacy-check:
+    uses: 7wells/repo-privacy-check-public/.github/workflows/privacy-check.yml@d689041eb5004e45c1902b6e76659c7473aa0afa # v0.3.2 public full-scan workflow
+
   private-data-check:
+    needs: generic-privacy-check
+    if: ${{ always() }}
     runs-on: ubuntu-latest
 
     steps:
