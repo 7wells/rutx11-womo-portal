@@ -105,6 +105,10 @@ install_web_files() {
     esac
 
     target="$WEB_ROOT/${file#./}"
+    if [ "$file" = "./portal-config.js" ] && { [ -f "$target" ] || [ -L "$target" ]; }; then
+      status "Preserving installed portal configuration"
+      continue
+    fi
     mkdir -p "$(dirname "$target")"
     cp "$file" "$target"
   done
@@ -320,9 +324,18 @@ configure_uhttpd() {
 
   command -v uci >/dev/null 2>&1 || fail "uci command not found."
 
-  uci -q delete uhttpd.womo || true
-  uci set uhttpd.womo="uhttpd"
-  uci add_list uhttpd.womo.listen_http="0.0.0.0:8080"
+  uci -q get uhttpd.womo >/dev/null 2>&1 || uci set uhttpd.womo="uhttpd"
+  if ! uci -q get uhttpd.womo.listen_http >/dev/null 2>&1; then
+    lan_ip="$(uci -q get network.lan.ipaddr)" || fail "LAN address is unavailable."
+    if ! printf '%s\n' "$lan_ip" | awk -F. '
+      NF != 4 { exit 1 }
+      { for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1 }
+      $1 == 0 || $1 == 127 || $1 == 255 { exit 1 }
+    '; then
+      fail "LAN address is invalid."
+    fi
+    uci add_list uhttpd.womo.listen_http="$lan_ip:8080"
+  fi
   uci set uhttpd.womo.home="$WEB_ROOT"
   uci set uhttpd.womo.cgi_prefix="/cgi-bin"
   uci commit uhttpd

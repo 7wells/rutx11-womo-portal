@@ -212,7 +212,7 @@
     <header>
       <h1>WoMo Neigung</h1>
       <div class="header-actions">
-        <a id="esp32MainLink" class="womo-nav-link" href="http://192.168.11.3/" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
+        <a id="esp32MainLink" class="womo-nav-link disabled" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener noreferrer">ESP32 Main</a>
         <a class="womo-nav-link" href="index.html">Karte</a>
       </div>
     </header>
@@ -264,7 +264,7 @@
   <script src="tilt-config.js"></script>
   <script>
     const PORTAL_CONFIG = window.WOMO_PORTAL_CONFIG || {};
-    const MAIN_URL = normalizeBaseUrl(PORTAL_CONFIG.esp32MainUrl || 'http://192.168.11.3/');
+    const MAIN_URL = normalizeBaseUrl(PORTAL_CONFIG.esp32MainUrl || '');
     const TILT_DATA_URL = '/cgi-bin/tilt.json';
     const MAX_TILT_DEGREES = 10;
     const POLL_INTERVAL_MS = 750;
@@ -358,7 +358,23 @@
     const displayedTilt = { longitudinal: null, transverse: null };
     const pendingCalibrationAxes = new Set();
 
-    esp32MainLink.href = `${MAIN_URL}/`;
+    let mainLinkUrl;
+    try {
+      mainLinkUrl = new URL(MAIN_URL);
+    } catch (_) {
+      mainLinkUrl = null;
+    }
+    if (!mainLinkUrl || !['http:', 'https:'].includes(mainLinkUrl.protocol) || mainLinkUrl.username || mainLinkUrl.password) {
+      esp32MainLink.removeAttribute('href');
+      esp32MainLink.classList.add('disabled');
+      esp32MainLink.setAttribute('aria-disabled', 'true');
+      esp32MainLink.tabIndex = -1;
+    } else {
+      esp32MainLink.href = `${MAIN_URL}/`;
+      esp32MainLink.classList.remove('disabled');
+      esp32MainLink.removeAttribute('aria-disabled');
+      esp32MainLink.removeAttribute('tabindex');
+    }
 
     function normalizeBaseUrl(url) {
       return String(url || '').trim().replace(/\/+$/, '');

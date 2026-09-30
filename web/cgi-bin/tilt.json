@@ -1,6 +1,13 @@
 #!/bin/sh
 
-ESP32_BASE_URL="${WOMO_ESP32_BASE_URL:-http://192.168.11.3}"
+PORTAL_CONFIG_FILE="${WOMO_PORTAL_CONFIG_FILE:-/usr/local/home/www/womo/portal-config.js}"
+# Read the administrator-owned installed configuration without executing JavaScript.
+read_esp32_base_url() {
+  [ -r "$PORTAL_CONFIG_FILE" ] || return 0
+  sed -n "s/^[[:space:]]*esp32MainUrl:[[:space:]]*'\([^']*\)'.*$/\1/p" "$PORTAL_CONFIG_FILE" | sed -n '1p'
+}
+ESP32_BASE_URL="${WOMO_ESP32_BASE_URL:-$(read_esp32_base_url)}"
+ESP32_BASE_URL="${ESP32_BASE_URL%/}"
 PASSWORD_FILE="${WOMO_ESP32_PASSWORD_FILE:-/usr/local/home/womo-data/esp32-main.password}"
 CURL_BIN="${WOMO_CURL_BIN:-curl}"
 JSONFILTER_BIN="${WOMO_JSONFILTER_BIN:-jsonfilter}"
@@ -86,6 +93,14 @@ fetch_sensor_value() {
 trap cleanup 0
 trap 'exit 1' 1 2 15
 umask 077
+
+case "$ESP32_BASE_URL" in
+  http://*|https://*) ;;
+  *) send_unavailable ;;
+esac
+case "$ESP32_BASE_URL" in
+  *'@'*|*' '*|*'?'*|*'#'*) send_unavailable ;;
+esac
 
 command -v "$CURL_BIN" >/dev/null 2>&1 || send_unavailable
 command -v "$JSONFILTER_BIN" >/dev/null 2>&1 || send_unavailable

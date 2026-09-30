@@ -14,8 +14,8 @@ ESP32 credentials are configured locally on the router after deployment with
 `womo-portal-set-esp32-password`. They are never stored in this repository or
 sent to the browser. See [ESP32 Main credentials](#esp32-main-credentials).
 
-If your local device addresses differ, edit `web/portal-config.js` before
-running the installer. See [Local device URLs](#local-device-urls).
+Configure local device destinations in the installed portal configuration after
+installation. Keep local URLs outside this Git repository. See [Local device URLs](#local-device-urls).
 
 The first deployment copies this repository to the router and runs one
 installer script. After that, future updates need only the command
@@ -25,13 +25,8 @@ The installer is designed to keep existing GPS track data under
 `/usr/local/home/womo-data`. As with any router maintenance, keep a backup if
 the existing data matters to you.
 
-Open the portal after deployment:
-
-- http://ROUTER_IP:8080/
-
-Use the router address that is reachable from your device. For example, this
-may be a LAN address such as `192.168.11.1` or a VPN address if you access the
-router through a tunnel.
+Open the portal after deployment using the router address reachable from your
+device on port 8080, including when connected through a tunnel.
 
 ## Details
 
@@ -69,13 +64,18 @@ router through a tunnel.
 
 ### Local device URLs
 
-- Edit `web/portal-config.js` before deployment if your RUTX11, ESP32 Main, or
-  Truma/Smartavan use different local URLs.
-- The file configures only links to local devices, not the portal URL itself.
-- Open the portal through whichever router address is reachable from your
-  device, for example a LAN address or a VPN address.
-- The default values match one common local setup, but they may need adjustment
-  for your network.
+The repository ships with no local device URLs. On a new installation, the GUI,
+ESP32 Main, and Smartavan navigation links stay disabled, and live tilt data is
+unavailable until configured.
+
+On the router, edit `/usr/local/home/www/womo/portal-config.js` after installation
+and set `routerGuiUrl`, `esp32MainUrl`, and `trumaUrl` to the intended local HTTP
+or HTTPS destinations. This installed file is outside the Git repository. The
+ESP32 CGI reads its destination from the same installed configuration.
+
+The installer and updater preserve an existing installed configuration and the
+existing portal listener. For a new portal listener, the installer reads the
+router's configured LAN address; it never binds to every network interface.
 
 ### ESP32 Main credentials
 
@@ -104,10 +104,11 @@ cd /tmp
 wget -O womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
 tar -xzf womo.tar.gz
 cd rutx11-womo-portal-main
-# Optional: edit web/portal-config.js if your device URLs differ.
 sh scripts/install_womo_landing.sh
 womo-portal-set-esp32-password
 ```
+
+Configure the installed `portal-config.js` on the router after installation.
 
 After the first successful deployment, install future versions with:
 
@@ -115,8 +116,8 @@ After the first successful deployment, install future versions with:
 womo-portal-update
 ```
 
-The update command keeps the currently installed `portal-config.js`, so local
-device URLs are not replaced by repository defaults.
+The update command keeps the installed `portal-config.js`; local device URLs
+are never replaced by repository defaults.
 
 ### Deployment notes
 

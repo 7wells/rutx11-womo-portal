@@ -377,10 +377,10 @@
 
     <div class="toolbar-row">
       <nav class="nav-links" aria-label="Navigation">
-        <a id="routerGuiLink" class="womo-nav-link" href="https://192.168.11.1" target="_blank" rel="noopener noreferrer">RUTX11</a>
+        <a id="routerGuiLink" class="womo-nav-link disabled" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener noreferrer">RUTX11</a>
         <a id="googlemaps" class="womo-nav-link disabled" href="#" target="_blank" rel="noopener noreferrer">Google Maps</a>
         <a class="womo-nav-link" href="tilt.html" target="_blank" rel="noopener noreferrer">Tilt</a>
-        <a id="trumaLink" class="womo-nav-link" href="http://192.168.11.4" target="_blank" rel="noopener noreferrer">Truma</a>
+        <a id="trumaLink" class="womo-nav-link disabled" aria-disabled="true" tabindex="-1" target="_blank" rel="noopener noreferrer">Truma</a>
       </nav>
 
       <div class="track-tabs">
@@ -475,13 +475,28 @@
     const googleMapsLink = document.getElementById('googlemaps');
     const trumaLink = document.getElementById('trumaLink');
 
-    function configuredUrl(value, fallback) {
-      const text = String(value || fallback || '').trim();
-      return text || fallback;
+    function configureLocalLink(link, value) {
+      let url;
+      try {
+        url = new URL(String(value || '').trim());
+      } catch (_) {
+        url = null;
+      }
+      if (!url || !['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+        link.removeAttribute('href');
+        link.classList.add('disabled');
+        link.setAttribute('aria-disabled', 'true');
+        link.tabIndex = -1;
+        return;
+      }
+      link.href = url.href;
+      link.classList.remove('disabled');
+      link.removeAttribute('aria-disabled');
+      link.removeAttribute('tabindex');
     }
 
-    routerGuiLink.href = configuredUrl(PORTAL_CONFIG.routerGuiUrl, routerGuiLink.href);
-    trumaLink.href = configuredUrl(PORTAL_CONFIG.trumaUrl, trumaLink.href);
+    configureLocalLink(routerGuiLink, PORTAL_CONFIG.routerGuiUrl);
+    configureLocalLink(trumaLink, PORTAL_CONFIG.trumaUrl);
 
     function syncMapSize() {
       const viewport = window.visualViewport;

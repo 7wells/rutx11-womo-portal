@@ -20,10 +20,9 @@
 
 - `web/index.html` is the landing page and map UI.
 - There is no separate `map.html`; do not reintroduce a separate map navigation entry unless explicitly requested.
-- Preserve the top navigation targets:
-  - `GUI` -> `https://192.168.11.1`
-  - `Main` -> `http://192.168.11.3`
-  - `Smartavan` -> `http://192.168.11.4`
+- Preserve existing installed GUI, Main, and Smartavan navigation targets during updates.
+- Keep local device URLs only in the installed portal configuration outside this Git repository.
+- New installations must leave unconfigured local navigation targets disabled.
 - When changing the map UI, verify at least the Samsung Galaxy A56 Firefox viewport from the global instructions.
 
 ## Validation

@@ -3,14 +3,11 @@ name: Private data check
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  private-data-check:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Check for private GPS/runtime data
-        run: sh scripts/check_no_private_data.sh
+  privacy-check:
+    uses: 7wells/repo-privacy-check-public/.github/workflows/privacy-check.yml@422ddf8ac8068c3606381222b7a4abd9815954c9
