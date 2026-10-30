@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   privacy-check:
-    uses: 7wells/repo-privacy-check-public/.github/workflows/privacy-check.yml@422ddf8ac8068c3606381222b7a4abd9815954c9
+    uses: 7wells/repo-privacy-check-public/.github/workflows/privacy-check.yml@9d90102517eb75d0ad393a7f8b9cd01abb2b0d79
