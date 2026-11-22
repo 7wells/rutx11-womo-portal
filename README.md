@@ -1,6 +1,5 @@
 # RUTX11 WoMo Portal
 
-[![Privacy Check](https://github.com/7wells/rutx11-womo-portal/actions/workflows/private-data-check.yml/badge.svg?branch=main)](https://github.com/7wells/rutx11-womo-portal/actions/workflows/private-data-check.yml)
 Standalone local web portal for a Teltonika RUTX11 router.
 
 Use at your own risk. This project is provided as-is and without warranty.
