@@ -21,9 +21,7 @@ The first deployment copies this repository to the router and runs one
 installer script. After that, future updates need only the command
 `womo-portal-update`. See [Deploy on the RUTX11](#deploy-on-the-rutx11).
 
-The installer is designed to keep existing GPS track data under
-`/usr/local/home/womo-data`. As with any router maintenance, keep a backup if
-the existing data matters to you.
+Before upgrading RutOS, see [Recovery after RutOS firmware upgrades](#recovery-after-rutos-firmware-upgrades).
 
 Open the portal after deployment using the router address reachable from your
 device on port 8080, including when connected through a tunnel.
@@ -101,7 +99,7 @@ router's configured LAN address; it never binds to every network interface.
 
 ```sh
 cd /tmp
-wget -O womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
+curl -4 -fSL --connect-timeout 15 --max-time 120 -o womo.tar.gz "https://github.com/7wells/rutx11-womo-portal/archive/refs/heads/main.tar.gz"
 tar -xzf womo.tar.gz
 cd rutx11-womo-portal-main
 sh scripts/install_womo_landing.sh
@@ -127,7 +125,7 @@ are never replaced by repository defaults.
   portal watchdog, and installs the persistent `womo-portal-update` command
   under `/usr/local/bin`.
 - Use the full deployment procedure for first setup or after a factory reset.
-  Use `womo-portal-update` for normal updates.
+  Use `womo-portal-update` for normal portal updates.
 - The update command preserves the installed `portal-config.js`. GPS history,
   ESP32 credentials, and tilt calibration already remain outside the web root
   and are not replaced by an update.
@@ -137,6 +135,20 @@ are never replaced by repository defaults.
 - Existing monthly GPS files in `/usr/local/home/root/womo-data/gps` are copied
   to `/usr/local/home/womo-data/gps` during installation. Legacy files are not
   deleted automatically.
+
+### Recovery after RutOS firmware upgrades
+
+During the upgrade from `RUTX_R_00.07.23.4` to `RUTX_R_00.07.25.3`, the
+portal installation, GPS logger and watchdog services, and portal uhttpd
+instance were lost even though **Keep settings** was enabled. The full
+[deployment procedure](#deploy-on-the-rutx11) restored the installation.
+During recovery, `wget` failed with a connection timeout. The `curl` command
+above succeeded over IPv4. The cause of the timeout remains unknown.
+
+Before upgrading RutOS, back up your local device URLs, ESP32 credentials,
+GPS history, and tilt calibration data separately. Verify these after
+redeployment and restore them separately if needed. Full preservation of
+these items by the standard RutOS backup has not been verified.
 
 ### Runtime data
 
